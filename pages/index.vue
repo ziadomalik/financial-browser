@@ -18,9 +18,12 @@
       </div>
     </div>
   </div>
+  <SocketExample class="mt-4" />
 </template>
 
 <script setup lang="ts">
+import SocketExample from '~/components/SocketExample.client.vue'
+
 const supabase = useSupabaseClient()
 
 const logout = async () => {

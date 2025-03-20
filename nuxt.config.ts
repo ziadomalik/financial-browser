@@ -2,6 +2,11 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
+  nitro: {
+    experimental: {
+      websocket: true
+    }
+  },
   modules: [
     '@nuxt/icon',
     '@nuxt/image',
@@ -9,7 +14,13 @@ export default defineNuxtConfig({
     'shadcn-nuxt',
     '@nuxtjs/supabase',
     '@pinia/nuxt',
+    // 'nuxt-socket-io', // Removed as we're using Nitro's WebSocket support
   ],
+
+  // Basic build configuration
+  build: {
+    transpile: ['socket.io-client']
+  },
 
   shadcn: { prefix: 'S' },
 
@@ -28,5 +39,10 @@ export default defineNuxtConfig({
     public: {
       apiBaseUrl: process.env.API_BASE_URL,
     }
+  },
+
+  // Explicitly set the port
+  devServer: {
+    port: 3000
   },
 })
