@@ -9,8 +9,11 @@
         </div>
       </div>
     </div>
-    <div class="w-1/2 h-full">
-      <!-- Right side content -->
+    <div class="w-1/2 h-full relative">
+      <div class="absolute left-0 top-1/2 -translate-y-1/2 h-[30vh] border-l-4 rounded-full border-[#E9887580]/50"></div>
+      <div class="flex flex-col items-center justify-center">
+        <span>Voice Assistant</span>
+      </div>
     </div>
   </div>
 </template>
