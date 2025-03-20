@@ -6,23 +6,31 @@
         </div>
         <!-- <div ref="cardContainer" class="max-w-md flex flex-col gap-2 m-5"></div> -->
         <!-- <AdaptiveCard :card="adaptiveCardExample" :closable="true" /> -->
-        <pre class="text-xs max-w-xl">{{ result }}</pre>
+        <div v-for="card in object">
+            <AdaptiveCard :card="card" :closable="true" />
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
+import { z } from 'zod'
+
 const query = ref('')
 const result = ref<any>('')
+
+const { zodSchema } = await useAdaptiveSchema()
+
+const { object, submit } = useObject({
+    api: '/api/ui',
+    schema: zodSchema.value!
+})
 
 const handleClick = async () => {
     console.log('[Six] Calling UI API: ', query.value)
 
-    const response = await $fetch(`/api/ui`, {
-        method: 'POST',
-        body: {
-            query: query.value,
-            rawData: { sus: query.value } 
-        }
+    const response = await submit({
+        query: query.value,
+        rawData: { sus: query.value } 
     })
 
     console.log('[Six] Done Calling: ', response)
