@@ -18,5 +18,10 @@ export default defineNuxtConfig({
       exclude: ['/auth/*'],
       callback: '/auth/confirm',
     }
-  }
+  },
+
+  runtimeConfig: {
+    firecrawlApiKey: process.env.FIRECRAWL_API_KEY,
+    openaiApiKey: process.env.OPENAI_API_KEY,
+  },
 })

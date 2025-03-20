@@ -17,7 +17,7 @@ SUPABASE_URL=""
 SUPABASE_KEY=""
 DATABASE_URL="" # Supabase Connection String
 OPENAI_API_KEY=""
-
+FIRECRAWL_API_KEY=""
 ```
 
 3. Run
