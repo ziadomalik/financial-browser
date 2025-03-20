@@ -1,5 +1,5 @@
 <template>
-    <div class="logo-container" :class="{ 'animate': animation !== false }">
+    <div class="logo-container" :class="{ 'animate': animation !== false, 'no-hover': disableHover }">
         <svg width="250" height="250" viewBox="0 0 250 250" fill="none" xmlns="http://www.w3.org/2000/svg">
             <g class="logo-elements">
                 <circle class="outer-circle" cx="125" cy="125" r="125" fill="#DE3819" fill-opacity="0.05" />
@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ animation?: boolean }>()
+defineProps<{ animation?: boolean, disableHover?: boolean }>()
 </script>
 
 <style scoped>
@@ -56,6 +56,16 @@ defineProps<{ animation?: boolean }>()
 .logo-container:hover .inner-circle {
     animation: pulse-inner-hover 3s ease-in-out infinite;
     animation-delay: 0s;
+}
+
+.logo-container.no-hover:hover {
+    transform: none;
+}
+
+.logo-container.no-hover:hover .outer-circle,
+.logo-container.no-hover:hover .middle-circle,
+.logo-container.no-hover:hover .inner-circle {
+    animation: none;
 }
 
 @keyframes pulse-outer {
