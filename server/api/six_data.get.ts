@@ -116,7 +116,6 @@ export const getCompanyStockSummary = tool({
 
         console.log(`(getCompanyStockSummary) Done`)
         console.log('Response:', response)
-        console.log('API Base URL:', apiBaseUrl)
 
         return response
     }
