@@ -25,5 +25,8 @@ export default defineNuxtConfig({
     firecrawlApiKey: process.env.FIRECRAWL_API_KEY,
     openaiApiKey: process.env.OPENAI_API_KEY,
     newsApiKey: process.env.NEWS_API_KEY,
+    public: {
+      apiBaseUrl: process.env.API_BASE_URL,
+    }
   },
 })
