@@ -22,27 +22,27 @@ const createCrawlQueriesPrompt = `
 `
 
 const FirecrawlQuerySchema = z.object({
-    prompt: z.string().describe('The prompt for the bot to crawl the sites'),
-    relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
+  prompt: z.string().describe('The prompt for the bot to crawl the sites'),
+  relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
 })
 
 const createCrawlQueries = async (query: string) => {
-    const { object } = await generateObject({
-        model: openai('gpt-4-turbo'),
-        schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
-        prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
-    });
+  const { object } = await generateObject({
+    model: openai('gpt-4-turbo'),
+    schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
+    prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
+  });
 
-    console.log(object)
+  console.log(object)
 
-    return object
+  return object
 }
 
 export const filterCompaniesByCriteria = tool({
     description: `Get a list of companies filtered by certain criteria.`,
     parameters: z.object({
         query: z.array(z.object({
-            criteria: z.string().describe('The criteria to filter the companies by'),
+            criteria: z.string().describe('The criteria to filter the companies by'), 
             value: z.string().describe('The value of the criteria')
         })).describe(`
         Search with criteria. Query is a string with a dict schema like: '{"criteria": "logical value"}'.
@@ -60,34 +60,19 @@ export const filterCompaniesByCriteria = tool({
             }, {})
         );
 
-        try {
-
-            // Add headers for authentication
-            const headers: Record<string, string> = {
+        const response = await $fetch(`${apiBaseUrl}/searchwithcriteria?query=${encodeURIComponent(queryString)}`, {
+            method: 'POST',
+            headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            };
+            },
+            body: {}, 
+            timeout: 30000,
+        })
 
-            const response = await $fetch(`${apiBaseUrl}/searchwithcriteria?query=${encodeURIComponent(queryString)}`, {
-                method: 'POST',
-                headers,
-                body: {},
-                timeout: 30000,
-            })
+        console.log(`(filterCompaniesByCriteria) Done`)
 
-            console.log(`(filterCompaniesByCriteria) Done`)
-
-            return response
-
-        } catch (error) {
-            console.error(`(filterCompaniesByCriteria) Error:`, error)
-
-            // Create a friendly error response 
-            return {
-                error: true,
-                message: error instanceof Error ? error.message : 'Failed to filter companies by criteria',
-            }
-        }
+        return response
     }
 })
 
@@ -100,22 +85,19 @@ export const getCompanyStockSummary = tool({
         console.log(`(getCompanyStockSummary) Making Request`)
 
         const { apiBaseUrl } = useRuntimeConfig()
-
-        // Add headers for authentication
-        const headers: Record<string, string> = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        };
-
-        const response = await $fetch(`https://idchat-api-containerapp01-dev.orangepebble-16234c4b.switzerlandnorth.azurecontainerapps.io/summary?query=${encodeURIComponent(query)}`, {
+        
+        const response = await $fetch(`${apiBaseUrl}/summary`, {
             method: 'POST',
-            headers,
-            body: {},
+            query: { query },
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: {}, 
             timeout: 30000,
-        })
+        }) 
 
         console.log(`(getCompanyStockSummary) Done`)
-        console.log('Response:', response)
 
         return response
     }
@@ -140,32 +122,30 @@ export const getCompanyData = tool({
         // Convert the query array into a JSON string format
         // Format: {"company1": "information to retrieve|yyyyQq"; "company2": "information to retrieve|yyyy"}
         const queryObj: Record<string, string> = {}
-
+        
         for (const item of query) {
             const yearStr = item.year.toString()
             const infoWithYear = `${item.informationToRetrieve.join(', ')}|${yearStr}`
             queryObj[item.companyName] = infoWithYear
         }
-
+        
         const queryString = encodeURIComponent(JSON.stringify(queryObj).replace(/,/g, ';'))
-
+        
         console.log(`(getCompanyData) Query String: ${queryString}`)
-
-        // Add headers for authentication
-        const headers: Record<string, string> = {
-            'Accept': 'application/json',
-            'Content-type': 'application/json'
-        };
+        
 
         const response = await $fetch(`${apiBaseUrl}/companydatasearch?query=${queryString}`, {
             method: 'POST',
-            headers,
+            headers: {
+                'Accept': 'application/json',
+                'Content-type': 'application/json'
+            },
             body: {},
             timeout: 32000,
         })
-
+        
         console.log(`(getCompanyData) Done`)
-
+        
         return response
     }
 })
@@ -182,12 +162,6 @@ export const getHistoricalStockPrice = tool({
 
         const { apiBaseUrl } = useRuntimeConfig()
 
-        // Add headers for authentication
-        const headers: Record<string, string> = {
-            'Accept': 'application/json',
-            'Content-type': 'application/json',
-        };
-
         const response = await $fetch(`${apiBaseUrl}/ohlcv`, {
             method: 'POST',
             query: {
@@ -195,7 +169,10 @@ export const getHistoricalStockPrice = tool({
                 first,
                 last
             },
-            headers,
+            headers: {
+                'Accept': 'application/json',
+                'Content-type': 'application/json',
+            },
             body: {},
             timeout: 15000,
         })
@@ -214,62 +191,54 @@ export const getCurrentNews = tool({
     async execute({ query }) {
         console.log(`(getCurrentNews) Making Request`)
 
+        const { apiBaseUrl } = useRuntimeConfig()
         const { firecrawlApiKey } = useRuntimeConfig()
 
-        try {
-            // Initialize Firecrawl client
-            const firecrawl = new FirecrawlApp({
-                apiKey: firecrawlApiKey
-            })
+        // Initialize Firecrawl client
+        const firecrawl = new FirecrawlApp({
+            apiKey: firecrawlApiKey
+        })
 
+        try {
             // Get crawl queries
             const { queries } = await createCrawlQueries(query)
-
+            
             // Process the first query for immediate results
             if (queries.length > 0) {
                 const q = queries[0]
-
-                try {
-                    // Extract data using Firecrawl with the Zod schema
-                    const result = await firecrawl.extract(
-                        q.relevantSites,
-                        {
-                            prompt: q.prompt,
-                            schema: z.object({
-                                findings: z.array(z.object({
-                                    title: z.string(),
-                                    teaser: z.string().describe('Extremely short, couple word teaser'),
-                                    details: z.string().describe('A longer description of the finding')
-                                }))
-                            })
-                        }
-                    )
-
-                    console.log(`(getCurrentNews) Done`)
-                    return result
-                } catch (extractError) {
-                    console.error(`(getCurrentNews) Extraction Error:`, extractError)
-
-                    // Return generic error
-                    return {
-                        error: true,
-                        message: `Failed to extract news: ${extractError.message}`,
-                        findings: []
+                
+                // Extract data using Firecrawl with the Zod schema
+                const result = await firecrawl.extract(
+                    q.relevantSites, 
+                    { 
+                        prompt: q.prompt,
+                        schema: z.object({ 
+                            findings: z.array(z.object({ 
+                                title: z.string(), 
+                                teaser: z.string().describe('Extremely short, couple word teaser'), 
+                                details: z.string().describe('A longer description of the finding') 
+                            })) 
+                        })
                     }
-                }
+                )
+                
+                console.log(`(getCurrentNews) Done`)
+                return result
             } else {
                 console.log(`(getCurrentNews) No queries generated`)
                 return { findings: [] }
             }
         } catch (error) {
             console.error(`(getCurrentNews) Error:`, error)
-
-            return {
-                error: true,
-                message: `Failed to retrieve news: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                findings: []
+            return { 
+                findings: [{ 
+                    title: "Error retrieving news", 
+                    teaser: "Error occurred", 
+                    details: `Failed to retrieve news: ${error instanceof Error ? error.message : String(error)}` 
+                }] 
             }
         }
+        
     }
 })
 
@@ -321,7 +290,7 @@ export async function processFinancialQuery(query: string, context?: {
 
         // Extract tool results
         const toolResults = steps.flatMap(step => step.toolResults || [])
-
+        
         return {
             text,
             toolResults,
