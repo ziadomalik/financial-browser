@@ -7,7 +7,8 @@ export default defineNuxtConfig({
     '@nuxt/image',
     '@nuxtjs/tailwindcss',
     'shadcn-nuxt',
-    '@nuxtjs/supabase'
+    '@nuxtjs/supabase',
+    '@pinia/nuxt',
   ],
 
   shadcn: { prefix: 'S' },
@@ -23,5 +24,6 @@ export default defineNuxtConfig({
   runtimeConfig: {
     firecrawlApiKey: process.env.FIRECRAWL_API_KEY,
     openaiApiKey: process.env.OPENAI_API_KEY,
+    newsApiKey: process.env.NEWS_API_KEY,
   },
 })
