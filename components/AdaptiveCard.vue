@@ -28,24 +28,47 @@ const props = defineProps<{
 const emit = defineEmits(['executeAction', 'close'])
 
 onMounted(() => {
-    const adaptiveCard = new AdaptiveCards.AdaptiveCard();
-    adaptiveCard.hostConfig = new AdaptiveCards.HostConfig({
-        fontFamily: "Inter, Helvetica Neue, sans-serif",
-        fontSizes: {
-          small: 12,
-          default: 14,
-          medium: 16,
-          large: 18,
-          extraLarge: 22
+    try {
+        const adaptiveCard = new AdaptiveCards.AdaptiveCard();
+        
+        adaptiveCard.hostConfig = new AdaptiveCards.HostConfig({
+            fontFamily: "Inter, Helvetica Neue, sans-serif",
+            fontSizes: {
+              small: 12,
+              default: 14,
+              medium: 16,
+              large: 18,
+              extraLarge: 22
+            }
+        });
+
+        adaptiveCard.onExecuteAction = (action: AdaptiveCards.Action) => emit('executeAction', action);
+        adaptiveCard.parse(props.card);
+        const renderedCard = adaptiveCard.render();
+
+        if (cardContainer.value) {
+            cardContainer.value.appendChild(renderedCard!);
         }
-    });
-
-    adaptiveCard.onExecuteAction = (action: AdaptiveCards.Action) => emit('executeAction', action)
-    adaptiveCard.parse(props.card);
-    const renderedCard = adaptiveCard.render();
-
-    if (cardContainer.value) {
-        cardContainer.value.appendChild(renderedCard!);
+    } catch (error) {
+        console.error('Error rendering adaptive card:', error);
+        
+        // Create a simple fallback display if the card can't be rendered
+        if (cardContainer.value) {
+            const fallbackContent = document.createElement('div');
+            fallbackContent.className = 'p-4 bg-neutral-100 rounded-xl';
+            
+            const title = document.createElement('h3');
+            title.className = 'font-bold text-base mb-2';
+            title.textContent = props.card.title || 'Card Content';
+            
+            const content = document.createElement('pre');
+            content.className = 'text-sm whitespace-pre-wrap';
+            content.textContent = JSON.stringify(props.card, null, 2);
+            
+            fallbackContent.appendChild(title);
+            fallbackContent.appendChild(content);
+            cardContainer.value.appendChild(fallbackContent);
+        }
     }
 })
 </script>

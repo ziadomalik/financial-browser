@@ -4,7 +4,7 @@ import * as z from 'zod'
 // Function to convert JSON Schema to Zod schema
 const convertJsonSchemaToZod = (jsonSchema: any): z.ZodTypeAny => {
   if (!jsonSchema) return z.any()
-  
+
   // Handle different types
   if (jsonSchema.type === 'string') {
     let schema = z.string()
@@ -19,7 +19,7 @@ const convertJsonSchemaToZod = (jsonSchema: any): z.ZodTypeAny => {
     }
     return schema
   }
-  
+
   if (jsonSchema.type === 'number' || jsonSchema.type === 'integer') {
     let schema = jsonSchema.type === 'integer' ? z.number().int() : z.number()
     if (jsonSchema.minimum !== undefined) {
@@ -30,15 +30,15 @@ const convertJsonSchemaToZod = (jsonSchema: any): z.ZodTypeAny => {
     }
     return schema
   }
-  
+
   if (jsonSchema.type === 'boolean') {
     return z.boolean()
   }
-  
+
   if (jsonSchema.type === 'null') {
     return z.null()
   }
-  
+
   if (jsonSchema.type === 'array') {
     const items = jsonSchema.items ? convertJsonSchemaToZod(jsonSchema.items) : z.any()
     let schema = z.array(items)
@@ -50,29 +50,29 @@ const convertJsonSchemaToZod = (jsonSchema: any): z.ZodTypeAny => {
     }
     return schema
   }
-  
+
   if (jsonSchema.type === 'object' || jsonSchema.properties) {
     const shape: Record<string, z.ZodTypeAny> = {}
-    
+
     if (jsonSchema.properties) {
       for (const [key, propSchema] of Object.entries(jsonSchema.properties)) {
         shape[key] = convertJsonSchemaToZod(propSchema)
       }
     }
-    
+
     let schema = z.object(shape)
-    
+
     // Handle required properties
     if (jsonSchema.required && Array.isArray(jsonSchema.required)) {
       const requiredShape: Record<string, z.ZodTypeAny> = {}
-      
+
       for (const key of jsonSchema.required) {
         if (shape[key]) {
           requiredShape[key] = shape[key]
           delete shape[key]
         }
       }
-      
+
       // Combine required and optional properties
       schema = z.object({
         ...requiredShape,
@@ -81,26 +81,26 @@ const convertJsonSchemaToZod = (jsonSchema: any): z.ZodTypeAny => {
         )
       })
     }
-    
+
     return schema
   }
-  
+
   // Handle oneOf, anyOf, allOf
   if (jsonSchema.oneOf) {
     return z.union(jsonSchema.oneOf.map(convertJsonSchemaToZod))
   }
-  
+
   if (jsonSchema.anyOf) {
     return z.union(jsonSchema.anyOf.map(convertJsonSchemaToZod))
   }
-  
+
   if (jsonSchema.allOf) {
     return jsonSchema.allOf.reduce(
       (acc: z.ZodTypeAny, schema: any) => z.intersection(acc, convertJsonSchemaToZod(schema)),
       z.object({})
     )
   }
-  
+
   // Default to any
   return z.any()
 }
@@ -114,12 +114,12 @@ export const useAdaptiveSchema = () => {
   const fetchSchema = async () => {
     loading.value = true
     error.value = null
-    
+
     try {
-      // Fetch the simplified adaptive card schema from the server
-      const response = await $fetch('https://adaptivecards.io/schemas/adaptive-card.json')
+      // Use our server API endpoint to get the schema
+      const response = await $fetch('/api/adaptive-schema')
       schema.value = response
-      
+
       // Convert JSON schema to Zod schema
       zodSchema.value = convertJsonSchemaToZod(response)
     } catch (err) {
