@@ -948,10 +948,10 @@ export const useFinancialApi = () => {
                 try {
                     console.log(`API connectivity check attempt ${attempts}/${maxAttempts}`)
 
-                    const response = await $fetch('/api/financial/ping', {
+                    const response = await $fetch<ApiResponse>('/api/financial/ping', {
                         method: 'POST',
                         timeout: 20000 // Allow more time for the connectivity check
-                    }) as ApiResponse
+                    })
 
                     console.log('API connectivity check response received:', JSON.stringify({
                         hasResponse: !!response,

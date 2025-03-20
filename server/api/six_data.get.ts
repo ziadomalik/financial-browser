@@ -22,20 +22,20 @@ const createCrawlQueriesPrompt = `
 `
 
 const FirecrawlQuerySchema = z.object({
-  prompt: z.string().describe('The prompt for the bot to crawl the sites'),
-  relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
+    prompt: z.string().describe('The prompt for the bot to crawl the sites'),
+    relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
 })
 
 const createCrawlQueries = async (query: string) => {
-  const { object } = await generateObject({
-    model: openai('gpt-4-turbo'),
-    schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
-    prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
-  });
+    const { object } = await generateObject({
+        model: openai('gpt-4-turbo'),
+        schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
+        prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
+    });
 
-  console.log(object)
+    console.log(object)
 
-  return object
+    return object
 }
 
 export const filterCompaniesByCriteria = tool({
@@ -51,7 +51,7 @@ export const filterCompaniesByCriteria = tool({
         `)
     }),
     async execute({ query }) {
-        const { apiBaseUrl } = useRuntimeConfig().public
+        const { apiBaseUrl } = useRuntimeConfig()
 
         const queryString = JSON.stringify(
             query.reduce((acc: Record<string, string>, q) => {
@@ -60,19 +60,34 @@ export const filterCompaniesByCriteria = tool({
             }, {})
         );
 
-        const response = await $fetch(`${apiBaseUrl}/searchwithcriteria?query=${encodeURIComponent(queryString)}`, {
-            method: 'POST',
-            headers: {
+        try {
+
+            // Add headers for authentication
+            const headers: Record<string, string> = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            },
-            body: {},
-            timeout: 30000,
-        })
+            };
 
-        console.log(`(filterCompaniesByCriteria) Done`)
+            const response = await $fetch(`${apiBaseUrl}/searchwithcriteria?query=${encodeURIComponent(queryString)}`, {
+                method: 'POST',
+                headers,
+                body: {},
+                timeout: 30000,
+            })
 
-        return response
+            console.log(`(filterCompaniesByCriteria) Done`)
+
+            return response
+
+        } catch (error) {
+            console.error(`(filterCompaniesByCriteria) Error:`, error)
+
+            // Create a friendly error response 
+            return {
+                error: true,
+                message: error instanceof Error ? error.message : 'Failed to filter companies by criteria',
+            }
+        }
     }
 })
 
@@ -84,20 +99,24 @@ export const getCompanyStockSummary = tool({
     async execute({ query }) {
         console.log(`(getCompanyStockSummary) Making Request`)
 
-        const { apiBaseUrl } = useRuntimeConfig().public
+        const { apiBaseUrl } = useRuntimeConfig()
 
-        const response = await $fetch(`${apiBaseUrl}/summary`, {
+        // Add headers for authentication
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        };
+
+        const response = await $fetch(`https://idchat-api-containerapp01-dev.orangepebble-16234c4b.switzerlandnorth.azurecontainerapps.io/summary?query=${encodeURIComponent(query)}`, {
             method: 'POST',
-            query: { query },
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
+            headers,
             body: {},
             timeout: 30000,
         })
 
         console.log(`(getCompanyStockSummary) Done`)
+        console.log('Response:', response)
+        console.log('API Base URL:', apiBaseUrl)
 
         return response
     }
@@ -118,34 +137,36 @@ export const getCompanyData = tool({
     async execute({ query }) {
         console.log(`(getCompanyData) Making Request`)
 
-        const { apiBaseUrl } = useRuntimeConfig().public
+        const { apiBaseUrl } = useRuntimeConfig()
         // Convert the query array into a JSON string format
         // Format: {"company1": "information to retrieve|yyyyQq"; "company2": "information to retrieve|yyyy"}
         const queryObj: Record<string, string> = {}
-        
+
         for (const item of query) {
             const yearStr = item.year.toString()
             const infoWithYear = `${item.informationToRetrieve.join(', ')}|${yearStr}`
             queryObj[item.companyName] = infoWithYear
         }
-        
+
         const queryString = encodeURIComponent(JSON.stringify(queryObj).replace(/,/g, ';'))
-        
+
         console.log(`(getCompanyData) Query String: ${queryString}`)
-        
+
+        // Add headers for authentication
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'Content-type': 'application/json'
+        };
 
         const response = await $fetch(`${apiBaseUrl}/companydatasearch?query=${queryString}`, {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-type': 'application/json'
-            },
+            headers,
             body: {},
             timeout: 32000,
         })
-        
+
         console.log(`(getCompanyData) Done`)
-        
+
         return response
     }
 })
@@ -160,7 +181,13 @@ export const getHistoricalStockPrice = tool({
     async execute({ query, first, last }) {
         console.log(`(getHistoricalStockPrice) Making Request`)
 
-        const { apiBaseUrl } = useRuntimeConfig().public
+        const { apiBaseUrl } = useRuntimeConfig()
+
+        // Add headers for authentication
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'Content-type': 'application/json',
+        };
 
         const response = await $fetch(`${apiBaseUrl}/ohlcv`, {
             method: 'POST',
@@ -169,10 +196,7 @@ export const getHistoricalStockPrice = tool({
                 first,
                 last
             },
-            headers: {
-                'Accept': 'application/json',
-                'Content-type': 'application/json',
-            },
+            headers,
             body: {},
             timeout: 15000,
         })
@@ -191,54 +215,62 @@ export const getCurrentNews = tool({
     async execute({ query }) {
         console.log(`(getCurrentNews) Making Request`)
 
-        const { apiBaseUrl } = useRuntimeConfig().public
         const { firecrawlApiKey } = useRuntimeConfig()
 
-        // Initialize Firecrawl client
-        const firecrawl = new FirecrawlApp({
-            apiKey: firecrawlApiKey
-        })
-
         try {
+            // Initialize Firecrawl client
+            const firecrawl = new FirecrawlApp({
+                apiKey: firecrawlApiKey
+            })
+
             // Get crawl queries
             const { queries } = await createCrawlQueries(query)
-            
+
             // Process the first query for immediate results
             if (queries.length > 0) {
                 const q = queries[0]
-                
-                // Extract data using Firecrawl with the Zod schema
-                const result = await firecrawl.extract(
-                    q.relevantSites, 
-                    { 
-                        prompt: q.prompt,
-                        schema: z.object({ 
-                            findings: z.array(z.object({ 
-                                title: z.string(), 
-                                teaser: z.string().describe('Extremely short, couple word teaser'), 
-                                details: z.string().describe('A longer description of the finding') 
-                            })) 
-                        })
+
+                try {
+                    // Extract data using Firecrawl with the Zod schema
+                    const result = await firecrawl.extract(
+                        q.relevantSites,
+                        {
+                            prompt: q.prompt,
+                            schema: z.object({
+                                findings: z.array(z.object({
+                                    title: z.string(),
+                                    teaser: z.string().describe('Extremely short, couple word teaser'),
+                                    details: z.string().describe('A longer description of the finding')
+                                }))
+                            })
+                        }
+                    )
+
+                    console.log(`(getCurrentNews) Done`)
+                    return result
+                } catch (extractError) {
+                    console.error(`(getCurrentNews) Extraction Error:`, extractError)
+
+                    // Return generic error
+                    return {
+                        error: true,
+                        message: `Failed to extract news: ${extractError.message}`,
+                        findings: []
                     }
-                )
-                
-                console.log(`(getCurrentNews) Done`)
-                return result
+                }
             } else {
                 console.log(`(getCurrentNews) No queries generated`)
                 return { findings: [] }
             }
         } catch (error) {
             console.error(`(getCurrentNews) Error:`, error)
-            return { 
-                findings: [{ 
-                    title: "Error retrieving news", 
-                    teaser: "Error occurred", 
-                    details: `Failed to retrieve news: ${error instanceof Error ? error.message : String(error)}` 
-                }] 
+
+            return {
+                error: true,
+                message: `Failed to retrieve news: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                findings: []
             }
         }
-        
     }
 })
 
@@ -283,24 +315,25 @@ export async function processFinancialQuery(query: string, context?: {
                 getCurrentNews
             },
             toolChoice: 'required',
-            system: `
-            You are a helpful assistant that can filter companies by certain criteria and retrieve basic stock information.
-            You take the user queries and also enhance them to use more specific and accurate language.
-            Return your findings to the user in an easy to understand format.
-            DO NOT COMBINE THE TOOLS AT ALL, YOU DECIDE ON A TOOL, YOU'RE DONE.
-            `,
+            system: systemPrompt,
             prompt: query as string,
             maxSteps: 1,
         })
 
+        // Extract tool results
+        const toolResults = steps.flatMap(step => step.toolResults || [])
+
         return {
             text,
-            toolResults: steps.flatMap(step => step.toolResults || []),
+            toolResults,
         }
+
     } catch (error) {
         console.error('[ProcessFinancialQuery] Error generating response:', error)
+
         return {
-            error: 'Failed to process your request',
+            error: true,
+            message: 'Failed to process your request',
             details: error instanceof Error ? error.message : String(error)
         }
     }

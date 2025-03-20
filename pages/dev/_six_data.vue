@@ -13,8 +13,13 @@
                 <SButton 
                     @click="handleClick"
                     v-track-click="{ type: 'search-button', data: { source: 'search-form' } }"
+                    :disabled="isLoading"
+                    class="relative"
                 >
-                    Search
+                    <span v-if="isLoading" class="absolute inset-0 flex items-center justify-center">
+                        <div class="w-4 h-4 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
+                    </span>
+                    <span :class="{ 'opacity-0': isLoading }">Search</span>
                 </SButton>
             </div>
             
@@ -40,7 +45,14 @@
             <div class="md:col-span-2">
                 <h2 class="text-xl font-bold mb-2">API Results</h2>
                 <div class="bg-white rounded-lg shadow p-4 h-96 overflow-y-auto">
-                    <pre>{{ result }}</pre>
+                    <div v-if="isLoading" class="flex items-center justify-center h-full">
+                        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                    <div v-else-if="isError" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md mb-4">
+                        <h3 class="font-bold">Error</h3>
+                        <p>{{ errorMessage }}</p>
+                    </div>
+                    <pre v-else>{{ result }}</pre>
                 </div>
             </div>
             
@@ -53,10 +65,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const query = ref('')
 const result = ref<any>('')
+const isLoading = ref(false)
+
+// Computed properties for error handling
+const isError = computed(() => {
+    return result.value && 
+           typeof result.value === 'object' && 
+           (result.value.error === true || result.value.toolResults?.some((tr: any) => 
+               tr.result && tr.result.error === true
+           ))
+})
+
+const errorMessage = computed(() => {
+    if (!result.value) return ''
+    
+    // Check for top-level error message
+    if (result.value.message) return result.value.message
+    
+    // Check in tool results
+    if (result.value.toolResults) {
+        const errorResult = result.value.toolResults.find((tr: any) => 
+            tr.result && tr.result.error === true
+        )
+        if (errorResult && errorResult.result.message) {
+            return errorResult.result.message
+        }
+    }
+    
+    return 'An unknown error occurred'
+})
+
 
 // Sample data for interactive elements
 const sampleCompanies = ref([
@@ -77,11 +119,23 @@ const handleClick = async () => {
         $trackSearch(query.value, { source: 'button-click' })
     }
     
-    const response = await $fetch(`/api/six_data?query=${encodeURIComponent(query.value)}`)
-    console.log('[Six] Done Calling: ', response)
-
-    console.log(response)
-    result.value = response
+    // Set loading state
+    isLoading.value = true
+    result.value = ''
+    
+    try {
+        const response = await $fetch(`/api/six_data?query=${encodeURIComponent(query.value)}`)
+        console.log('[Six] Done Calling: ', response)
+        result.value = response
+    } catch (error) {
+        console.error('[Six] API error:', error)
+        result.value = {
+            error: true,
+            message: error instanceof Error ? error.message : 'Failed to fetch data from API'
+        }
+    } finally {
+        isLoading.value = false
+    }
 }
 
 // Handle voice input results

@@ -5,6 +5,7 @@
       <div v-for="(result, index) in results" :key="index" class="result-item">
         <div class="result-event">
           <strong>User action:</strong> {{ result.event }}
+          <span class="text-xs text-gray-500 ml-2">{{ formatTime(result.timestamp) }}</span>
         </div>
         <div class="result-content">
           <div v-if="result.toolResults?.length > 0">
@@ -18,7 +19,7 @@
             </div>
           </div>
           <div v-else class="p-2">
-            {{ result.result }}
+            {{ result.result || JSON.stringify(result.data || {}, null, 2) }}
           </div>
         </div>
       </div>
@@ -32,8 +33,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const { $queryResults } = useNuxtApp() as any
+// Get query results from our socket plugin
+const { $queryResults, $isSocketConnected } = useNuxtApp() as any
 const results = computed(() => $queryResults?.value || [])
+const isConnected = computed(() => $isSocketConnected?.value || false)
+
+// Format timestamp to a readable format
+function formatTime(timestamp: string) {
+  if (!timestamp) return '';
+  
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) {
+    return timestamp;
+  }
+}
 </script>
 
 <style scoped>

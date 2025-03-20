@@ -1,16 +1,32 @@
 <script setup>
-import { ref, onBeforeUnmount } from 'vue';
-import { socket } from "./socket";
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { getSocket } from "./socket";
 
+const socket = getSocket();
 const isConnected = ref(false);
 const transport = ref("N/A");
 const connectionErrors = ref([]);
 
-if (socket.connected) {
-  onConnect();
-}
+// Only proceed if socket is available (client-side)
+onMounted(() => {
+  if (!socket) {
+    connectionErrors.value.push("Socket.IO not available in this environment");
+    return;
+  }
+
+  if (socket.connected) {
+    onConnect();
+  }
+
+  // Set up event listeners
+  socket.on("connect", onConnect);
+  socket.on("disconnect", onDisconnect);
+  socket.on("connect_error", onConnectError);
+});
 
 function onConnect() {
+  if (!socket) return;
+  
   isConnected.value = true;
   connectionErrors.value = [];
   transport.value = socket.io.engine.transport.name;
@@ -33,12 +49,10 @@ function onConnectError(error) {
   console.error('Socket.IO connection error:', error);
 }
 
-socket.on("connect", onConnect);
-socket.on("disconnect", onDisconnect);
-socket.on("connect_error", onConnectError);
-
 // Clean up event listeners
 onBeforeUnmount(() => {
+  if (!socket) return;
+  
   socket.off("connect", onConnect);
   socket.off("disconnect", onDisconnect);
   socket.off("connect_error", onConnectError);

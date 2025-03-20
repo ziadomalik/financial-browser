@@ -1,11 +1,12 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { socket } from './socket';
+import { getSocket } from './socket';
 import { useUserStore } from '~/stores/user';
 
 const message = ref('');
 const serverMessages = ref([]);
 const userStore = useUserStore();
+const socket = getSocket();
 
 // Handle incoming messages
 function onServerMessage(eventName, data) {
@@ -18,6 +19,8 @@ function onServerMessage(eventName, data) {
 
 // Set up event listeners
 function setupListeners() {
+  if (!socket) return;
+  
   // Listen for various events
   socket.on('authenticated', data => onServerMessage('authenticated', data));
   socket.on('event-received', data => onServerMessage('event-received', data));
@@ -25,13 +28,15 @@ function setupListeners() {
 
 // Clean up listeners
 function cleanupListeners() {
+  if (!socket) return;
+  
   socket.off('authenticated');
   socket.off('event-received');
 }
 
 // Send a test event to the server
 function sendTestEvent() {
-  if (!message.value.trim()) return;
+  if (!socket || !message.value.trim()) return;
   
   socket.emit('user-event', {
     userId: userStore.userId || 'anonymous',
@@ -46,6 +51,8 @@ function sendTestEvent() {
 
 // Connect and authenticate
 function connectSocket() {
+  if (!socket) return;
+  
   if (!socket.connected) {
     socket.connect();
   }
