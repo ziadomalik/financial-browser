@@ -19,6 +19,7 @@
     "@nuxtjs/supabase": "1.5.0",
     "@pinia/nuxt": "^0.10.1",
     "@vueuse/core": "^13.0.0",
+    "adaptivecards": "^3.0.5",
     "ai": "^4.1.63",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
