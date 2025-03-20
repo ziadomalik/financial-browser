@@ -1,5 +1,6 @@
 import { defineNuxtPlugin } from '#app'
 import { useUserStore } from '~/stores/user'
+import { useSupabaseClient } from '#imports'
 
 export default defineNuxtPlugin(async (nuxtApp) => {
     // Initialize the user store
@@ -12,7 +13,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
         await userStore.init()
 
         // Set up auth state change listener
-        const supabase = nuxtApp.$supabase as any
+        const supabase = useSupabaseClient()
 
         supabase.auth.onAuthStateChange(async (event: string, session: any) => {
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {

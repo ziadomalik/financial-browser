@@ -3,6 +3,8 @@ import { useRuntimeConfig } from '#imports';
 import { z } from 'zod';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
+// Import the centralized query processor function
+import { processFinancialQuery } from '../api/six_data.get';
 
 // In-memory event queue
 interface UserEvent {
@@ -20,7 +22,7 @@ const activeConnections: Record<string, string> = {}; // userId -> socketId mapp
 
 // Event types schema
 const EventSchema = z.object({
-    eventType: z.enum(['click', 'search', 'zoom', 'voice', 'hover', 'navigation']),
+    eventType: z.enum(['click', 'zoom', 'voice', 'hover', 'navigation']),
     eventData: z.any(),
 });
 
@@ -88,7 +90,7 @@ const generateEventDescription = async (event: UserEvent): Promise<string> => {
 const shouldPlanQuery = (event: UserEvent): boolean => {
     // Logic to determine if this event should trigger query planning
     // For now, only let search events and certain clicks trigger queries
-    return ['search', 'click'].includes(event.eventType) &&
+    return ['click'].includes(event.eventType) &&
         event.description !== undefined;
 };
 
@@ -103,48 +105,24 @@ const planQuery = async (event: UserEvent): Promise<void> => {
         const recentEvents = eventQueues[event.userId]
             .filter(e => e.description)
             .slice(-5)
-            .map(e => e.description);
+            .map(e => e.description || ''); // Ensure no undefined values
 
-        // Generate a query plan using Vercel AI
-        const { text, steps } = await generateText({
-            model: openai('gpt-4o-mini'),
-            tools: {
-                filterCompaniesByCriteria: {
-                    description: `Get a list of companies filtered by certain criteria.`,
-                    parameters: z.object({
-                        query: z.array(z.object({
-                            criteria: z.string().describe('The criteria to filter the companies by'),
-                            value: z.string().describe('The value of the criteria')
-                        }))
-                    })
-                },
-                getCompanyStockSummary: {
-                    description: `Retrieve basic, rudimentary information about a company's stock.`,
-                    parameters: z.object({
-                        query: z.string().describe('The name of the company to search')
-                    })
-                }
-            },
-            system: `
-        You are a financial data assistant that plans queries based on user interactions.
-        User recent actions: ${recentEvents.join(', ')}
-        Current action: ${event.description}
-        
-        Based on these interactions, determine if you should:
-        1. Search for companies by criteria
-        2. Get company stock summary information
-        
-        Choose the most appropriate query based on the user's actions.
-      `,
-            prompt: `What financial data should I retrieve based on the user's current interaction: "${event.description}"?`,
-            maxSteps: 1,
-        });
+        // Use the centralized function to process the query with context
+        const result = await processFinancialQuery(
+            // The prompt is derived from the event description
+            `What financial data should I retrieve based on the user's current interaction: "${event.description}"?`,
+            // Pass context about recent actions and current action
+            {
+                recentActions: recentEvents,
+                currentAction: event.description
+            }
+        );
 
         // Send the planned query results back to the client
         io.to(socketId).emit('query-result', {
             event: event.description,
-            result: text,
-            toolResults: steps.flatMap(step => step.toolResults || []),
+            result: result.text,
+            toolResults: result.toolResults || [],
         });
     } catch (error) {
         console.error(`Error planning query: ${error}`);

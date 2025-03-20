@@ -7,7 +7,7 @@ export const filterCompaniesByCriteria = tool({
     description: `Get a list of companies filtered by certain criteria.`,
     parameters: z.object({
         query: z.array(z.object({
-            criteria: z.string().describe('The criteria to filter the companies by'), 
+            criteria: z.string().describe('The criteria to filter the companies by'),
             value: z.string().describe('The value of the criteria')
         })).describe(`
         Search with criteria. Query is a string with a dict schema like: '{"criteria": "logical value"}'.
@@ -31,7 +31,7 @@ export const filterCompaniesByCriteria = tool({
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: {}, 
+            body: {},
             timeout: 30000,
         })
 
@@ -50,7 +50,7 @@ export const getCompanyStockSummary = tool({
         console.log(`(getCompanyStockSummary) Making Request`)
 
         const { apiBaseUrl } = useRuntimeConfig().public
-        
+
         const response = await $fetch(`${apiBaseUrl}/summary`, {
             method: 'POST',
             query: { query },
@@ -58,9 +58,9 @@ export const getCompanyStockSummary = tool({
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: {}, 
+            body: {},
             timeout: 30000,
-        }) 
+        })
 
         console.log(`(getCompanyStockSummary) Done`)
 
@@ -68,12 +68,37 @@ export const getCompanyStockSummary = tool({
     }
 })
 
-export default defineEventHandler(async (event) => {
-    const { query } = getQuery(event)
-
-    console.log('[Six] Query: ', query)
+// Centralized function for processing financial queries via AI
+export async function processFinancialQuery(query: string, context?: {
+    recentActions?: string[],
+    currentAction?: string
+}) {
+    console.log('[ProcessFinancialQuery] Query: ', query)
+    console.log('[ProcessFinancialQuery] Context: ', context)
 
     try {
+        // Prepare system prompt based on context (if provided)
+        let systemPrompt = `
+            You are a helpful assistant that can filter companies by certain criteria and retrieve basic stock information.
+            You take the user queries and also enhance them to use more specific and accurate language.
+            Return your findings to the user in an easy to understand format.
+            DO NOT COMBINE THE TOOLS AT ALL, YOU DECIDE ON A TOOL, YOU'RE DONE.
+        `
+
+        // Add context information if provided (for query planner use case)
+        if (context?.recentActions?.length || context?.currentAction) {
+            systemPrompt += `
+            User recent actions: ${context.recentActions?.join(', ') || 'None'}
+            Current action: ${context.currentAction || 'None'}
+            
+            Based on these interactions, determine if you should:
+            1. Search for companies by criteria
+            2. Get company stock summary information
+            
+            Choose the most appropriate query based on the user's actions.
+            `
+        }
+
         const { text, steps } = await generateText({
             model: openai('gpt-4o-mini'),
             tools: {
@@ -81,25 +106,28 @@ export default defineEventHandler(async (event) => {
                 getCompanyStockSummary
             },
             toolChoice: 'required',
-            system: `
-            You are a helpful assistant that can filter companies by certain criteria and retrieve basic stock information.
-            You take the user queries and also enhance them to use more specific and accurate language.
-            Return your findings to the user in an easy to understand format.
-            DO NOT COMBINE THE TOOLS AT ALL, YOU DECIDE ON A TOOL, YOU'RE DONE.
-            `,
-            prompt: query as string,
+            system: systemPrompt,
+            prompt: query,
             maxSteps: 1,
         })
-        
+
         return {
             text,
             toolResults: steps.flatMap(step => step.toolResults || []),
         }
     } catch (error) {
-        console.error('[Six] Error generating response:', error)
+        console.error('[ProcessFinancialQuery] Error generating response:', error)
         return {
             error: 'Failed to process your request',
             details: error instanceof Error ? error.message : String(error)
         }
     }
+}
+
+export default defineEventHandler(async (event) => {
+    const { query } = getQuery(event)
+    console.log('[Six] Query: ', query)
+
+    // Use the centralized function for the API endpoint
+    return await processFinancialQuery(query as string)
 })

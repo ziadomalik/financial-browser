@@ -77,7 +77,7 @@ const handleClick = async () => {
         $trackSearch(query.value, { source: 'button-click' })
     }
     
-    const response = await $fetch(`/api/six?query=${encodeURIComponent(query.value)}`)
+    const response = await $fetch(`/api/six_data?query=${encodeURIComponent(query.value)}`)
     console.log('[Six] Done Calling: ', response)
 
     console.log(response)
