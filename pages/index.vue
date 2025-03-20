@@ -8,7 +8,15 @@
               <h1 class="text-3xl font-bold text-gray-900">Financial Browser</h1>
               <p class="text-gray-600">Search for stocks and financial information</p>
             </div>
-            <div>
+            <div class="flex items-center gap-4">
+              <div class="flex items-center">
+                <div class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" 
+                  :class="apiAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                  <span class="mr-1 w-2 h-2 rounded-full" 
+                    :class="apiAvailable ? 'bg-green-600 animate-pulse' : 'bg-red-600'"></span>
+                  <span>API {{ apiAvailable ? 'Available' : 'Unavailable' }}</span>
+                </div>
+              </div>
               <button @click="logout" class="text-sm text-gray-600 hover:text-gray-900">
                 Logout
               </button>
@@ -16,6 +24,25 @@
           </div>
           
           <QueryInput @submit="handleQuerySubmit" :loading="isLoading" />
+          
+          <!-- Error Message Display -->
+          <div v-if="errorMessage" class="mb-6 p-4 border-l-4 border-red-500 bg-red-50 text-red-700 rounded">
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span class="font-semibold">Error:</span>
+              <span class="ml-2">{{ errorMessage }}</span>
+            </div>
+            <div class="mt-3 ml-8 text-sm">
+              <p>The financial data service is currently unavailable or experiencing issues. Please try:</p>
+              <ul class="mt-2 list-disc ml-5">
+                <li>Using a more specific query (e.g., "AAPL stock price" instead of "Apple")</li>
+                <li>Waiting a few minutes and trying again</li>
+                <li>Checking your internet connection</li>
+              </ul>
+            </div>
+          </div>
           
           <!-- Loading Animation -->
           <div v-if="isLoading" class="py-12">
@@ -57,12 +84,6 @@
                   >
                     {{ formatToolName(tool) }}
                   </span>
-                  <span 
-                    v-if="result.isMockData" 
-                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-                  >
-                    Simulated Data
-                  </span>
                 </div>
               </div>
               
@@ -72,40 +93,54 @@
                 <StockOverviewCard v-if="result.stockData" :stock-data="result.stockData" />
                 
                 <div class="space-y-6">
-                  <!-- Stock Price History -->
-                  <div v-if="result.hasStockPriceData || result.tools.includes('ohlcv')" class="grid md:grid-cols-2 gap-6">
-                    <PriceHistoryChart :stock-data="result.stockData" />
+                  <!-- Stock Price History - Prioritize displaying chart when historical data is present -->
+                  <div v-if="result.hasStockPriceData || hasHistoricalPriceTools(result.tools)" class="space-y-4">
+                    <!-- Title section to clarify the data type -->
+                    <div v-if="hasHistoricalPriceTools(result.tools)" class="flex items-center justify-between">
+                      <h3 class="text-lg font-medium text-gray-900">Historical Price Data</h3>
+                      <span class="text-sm text-gray-500">{{ result.stockData.priceData?.length || 0 }} data points</span>
+                    </div>
                     
-                    <!-- Performance Metrics -->
-                    <div v-if="result.stockData" class="grid grid-cols-2 gap-4">
-                      <PerformanceMetricCard 
-                        title="Return" 
-                        :value="result.stockData.return"
-                        icon="trending-up"
-                        :positive="parseFloat(result.stockData.return) > 0"
-                        format="percent"
-                      />
-                      <PerformanceMetricCard 
-                        title="Maximum Price" 
-                        :value="result.stockData.maxPrice"
-                        icon="arrow-up-right"
-                        :positive="true"
-                        format="price"
-                      />
-                      <PerformanceMetricCard 
-                        title="Minimum Price" 
-                        :value="result.stockData.minPrice"
-                        icon="arrow-down-right"
-                        :positive="false"
-                        format="price"
-                      />
-                      <PerformanceMetricCard 
-                        title="Volatility" 
-                        :value="calculateVolatility(result.stockData)"
-                        icon="activity"
-                        :positive="false"
-                        format="percent"
-                      />
+                    <!-- Show the full-width chart when we have historical price data -->
+                    <div v-if="hasHistoricalPriceTools(result.tools)" class="w-full">
+                      <PriceHistoryChart :stock-data="result.stockData" />
+                    </div>
+                    
+                    <!-- Show grid layout with chart and metrics when we have regular stock data -->
+                    <div v-else class="grid md:grid-cols-2 gap-6">
+                      <PriceHistoryChart :stock-data="result.stockData" />
+                      
+                      <!-- Performance Metrics -->
+                      <div v-if="result.stockData" class="grid grid-cols-2 gap-4">
+                        <PerformanceMetricCard 
+                          title="Return" 
+                          :value="result.stockData.return"
+                          icon="trending-up"
+                          :positive="parseFloat(result.stockData.return) > 0"
+                          format="percent"
+                        />
+                        <PerformanceMetricCard 
+                          title="Maximum Price" 
+                          :value="result.stockData.maxPrice"
+                          icon="arrow-up-right"
+                          :positive="true"
+                          format="price"
+                        />
+                        <PerformanceMetricCard 
+                          title="Minimum Price" 
+                          :value="result.stockData.minPrice"
+                          icon="arrow-down-right"
+                          :positive="false"
+                          format="price"
+                        />
+                        <PerformanceMetricCard 
+                          title="Volatility" 
+                          :value="calculateVolatility(result.stockData)"
+                          icon="activity"
+                          :positive="false"
+                          format="percent"
+                        />
+                      </div>
                     </div>
                   </div>
                   
@@ -197,7 +232,6 @@ interface QueryResult {
   stockData: StockData;
   companyData: any;
   tools: string[];
-  isMockData: boolean;
   hasStockPriceData: boolean;
   hasCompanyData: boolean;
   timestamp: number;
@@ -228,6 +262,9 @@ const queryResults = ref<QueryResult[]>([])
 
 const apiAvailable = ref<boolean | null>(null)
 const lastQuery = ref('')
+
+// Add error message state
+const errorMessage = ref('')
 
 // Initialize and check API connectivity when component mounts
 onMounted(async () => {
@@ -334,6 +371,8 @@ const saveQueries = () => {
 
 const handleQuerySubmit = async (query: string) => {
   try {
+    // Clear any previous error
+    errorMessage.value = ''
     lastQuery.value = query
     console.log('Submitting query:', query)
     
@@ -345,56 +384,75 @@ const handleQuerySubmit = async (query: string) => {
       queryHistory.value.unshift(query)
     }
     
-    // Call the API service
-    const result = await queryFinancialData(query)
-    
-    if (result) {
-      console.log('Query result received, result object:', JSON.stringify({
-        symbol: result.symbol,
-        isMockData: result.isMockData
-      }))
-      console.log('isMockData reactive ref value:', isMockData.value)
-      console.log('Available tools:', availableTools.value.join(', '))
+    // Always call the API for fresh data, even if this query has been made before
+    try {
+      console.log('Making fresh API call for query:', query)
+      const result = await queryFinancialData(query)
       
-      // Store the result in our data ref
-      stockData.value = result
+      if (result) {
+        console.log('Query result received, result object:', JSON.stringify({
+          symbol: result.symbol
+        }))
+        console.log('Available tools:', availableTools.value.join(', '))
+        
+        // Store the result in our data ref
+        stockData.value = result
+        
+        // Set API availability (always true if we got a result)
+        updateApiState(true)
+        
+        // Create a new query result object
+        const newResult: QueryResult = {
+          query: query,
+          stockData: result,
+          companyData: companyInfoData.value || {},
+          tools: [...availableTools.value], // Create a copy of the array
+          hasStockPriceData: stockPriceData.value !== null,
+          hasCompanyData: companyInfoData.value !== null && Object.keys(companyInfoData.value).length > 0,
+          timestamp: Date.now()
+        }
+        
+        // Always add the new result at the beginning, even if query is repeated
+        queryResults.value.unshift(newResult)
+        
+        // Save to localStorage
+        saveQueries()
+        
+        console.log('Using API data')
+      }
+    } catch (apiError: any) {
+      // Enhanced API-specific error handling with more detailed messages
+      console.error("API Error:", apiError)
       
-      // Check if the result has a valid isMockData property
-      const isUsingMockData = result.isMockData === true || isMockData.value === true
+      // Extract the most user-friendly message possible
+      let userMessage = 'Failed to get data from the API'
       
-      // Set API availability based on whether mock data was used
-      updateApiState(!isUsingMockData)
-      
-      // Create a new query result object
-      const newResult: QueryResult = {
-        query: query,
-        stockData: result,
-        companyData: companyInfoData.value || {},
-        tools: [...availableTools.value], // Create a copy of the array
-        isMockData: isUsingMockData,
-        hasStockPriceData: stockPriceData.value !== null,
-        hasCompanyData: companyInfoData.value !== null && Object.keys(companyInfoData.value).length > 0,
-        timestamp: Date.now()
+      // If it's a structured API error response with a detailed message
+      if (apiError.response && apiError.response.message) {
+        userMessage = apiError.response.message
+      } else if (apiError.message) {
+        // For standard errors, get the message
+        userMessage = apiError.message
+        
+        // Clean up common API error messages to be more user-friendly
+        if (userMessage.includes('422 Unprocessable Entity')) {
+          userMessage = 'The financial data service is currently unable to process this request.'
+        } else if (userMessage.includes('timeout')) {
+          userMessage = 'The request timed out. The financial service may be under high load or temporarily unavailable.'
+        } else if (userMessage.includes('NetworkError')) {
+          userMessage = 'Network error occurred. Please check your internet connection.'
+        }
       }
       
-      // Add at the beginning of the results array (newest first)
-      queryResults.value.unshift(newResult)
-      
-      // Save to localStorage
-      saveQueries()
-      
-      if (isUsingMockData) {
-        console.log('Using mock data, API unavailable')
-      } else {
-        console.log('Using real API data, API available')
-      }
-    } else if (error.value) {
-      // Handle error
-      console.error("API Error:", error.value)
+      error.value = userMessage
+      errorMessage.value = userMessage
       updateApiState(false)
     }
   } catch (err) {
+    // Handle any other errors in the outer function
     console.error("Error processing query:", err)
+    error.value = err instanceof Error ? err.message : 'An unexpected error occurred'
+    errorMessage.value = `${error.value}`
     updateApiState(false)
   }
 }
@@ -403,6 +461,12 @@ const logout = async () => {
   const { error } = await supabase.auth.signOut()
   if (error) console.error('Error logging out:', error.message)
   router.push('/auth')
+}
+
+// Helper function to check if a query has historical price data tools
+const hasHistoricalPriceTools = (tools: string[]): boolean => {
+  const historicalPriceTools = ['ohlcv', 'Historical_Price_Data']
+  return tools.some(tool => historicalPriceTools.includes(tool))
 }
 </script>
 

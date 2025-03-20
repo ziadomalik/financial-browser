@@ -7,9 +7,12 @@
         <p class="text-sm text-gray-500">Historical stock price performance</p>
       </div>
       <div class="flex space-x-2">
-        <!-- Chart Type Selection -->
+        <!-- Chart Type Selection using Shadcn -->
         <div class="chart-controls">
-          <select v-model="selectedChartType" class="text-sm border rounded px-2 py-1">
+          <select
+            v-model="selectedChartType"
+            class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
             <option value="line">Line</option>
             <option value="candlestick">Candlestick</option>
           </select>
@@ -25,10 +28,10 @@
           :key="period.value" 
           @click="setTimePeriod(period.value)"
           :class="[
-            'px-3 py-1 text-xs font-medium rounded',
+            'inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring px-3 py-1 shadow-sm',
             selectedPeriod === period.value 
-              ? 'bg-primary text-white' 
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'bg-primary text-primary-foreground' 
+              : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
           ]"
         >
           {{ period.label }}
@@ -40,8 +43,8 @@
         <button 
           @click="showVolume = !showVolume"
           :class="[
-            'px-3 py-1 text-xs font-medium rounded mr-2',
-            showVolume ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            'inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring px-3 py-1 shadow-sm mr-2',
+            showVolume ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
           ]"
         >
           Volume
@@ -49,8 +52,8 @@
         <button 
           @click="showMA = !showMA"
           :class="[
-            'px-3 py-1 text-xs font-medium rounded',
-            showMA ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            'inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring px-3 py-1 shadow-sm',
+            showMA ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
           ]"
         >
           MA(50)
@@ -67,28 +70,38 @@
       <!-- Chart display -->
       <div v-else class="absolute inset-0 p-4 flex items-center justify-center">
         <svg width="100%" height="100%" viewBox="0 0 300 200" preserveAspectRatio="none">
-          <!-- Y-axis labels -->
-          <text x="30" y="15" font-size="10" text-anchor="end" class="text-gray-500">{{ formatPrice(yAxisMax) }}</text>
-          <text x="30" y="95" font-size="10" text-anchor="end" class="text-gray-500">{{ formatPrice(yAxisMiddle) }}</text>
-          <text x="30" y="175" font-size="10" text-anchor="end" class="text-gray-500">{{ formatPrice(yAxisMin) }}</text>
+          <!-- Y-axis labels - updated with modern styling -->
+          <g class="axis-labels">
+            <!-- Y-axis values -->
+            <text x="35" y="15" font-size="9" text-anchor="end" class="fill-muted-foreground font-medium">{{ formatPrice(yAxisMax) }}</text>
+            <text x="35" y="95" font-size="9" text-anchor="end" class="fill-muted-foreground font-medium">{{ formatPrice(yAxisMiddle) }}</text>
+            <text x="35" y="175" font-size="9" text-anchor="end" class="fill-muted-foreground font-medium">{{ formatPrice(yAxisMin) }}</text>
+            
+            <!-- Y-axis line -->
+            <line x1="40" y1="10" x2="40" y2="180" stroke="hsl(var(--border))" stroke-width="1" />
+          </g>
           
-          <!-- X-axis labels -->
-          <template v-for="(label, index) in xAxisLabels" :key="index">
-            <text 
-              :x="40 + (index * ((260) / (xAxisLabels.length - 1)))" 
-              y="195" 
-              font-size="10" 
-              text-anchor="middle" 
-              class="text-gray-500"
-            >
-              {{ label }}
-            </text>
-          </template>
+          <!-- X-axis labels - updated with modern styling -->
+          <g class="axis-labels">
+            <!-- X-axis values -->
+            <template v-for="(label, index) in xAxisLabels" :key="index">
+              <text 
+                :x="40 + (index * ((260) / (xAxisLabels.length - 1)))" 
+                y="195" 
+                font-size="9" 
+                text-anchor="middle" 
+                class="fill-muted-foreground font-medium"
+              >
+                {{ label }}
+              </text>
+            </template>
+            
+            <!-- X-axis line -->
+            <line x1="40" y1="180" x2="300" y2="180" stroke="hsl(var(--border))" stroke-width="1" />
+          </g>
           
-          <!-- Chart grid lines -->
-          <line x1="40" y1="10" x2="40" y2="180" stroke="#e5e5e5" stroke-width="1" />
-          <line x1="40" y1="180" x2="300" y2="180" stroke="#e5e5e5" stroke-width="1" />
-          <line x1="40" y1="95" x2="300" y2="95" stroke="#e5e5e5" stroke-width="1" stroke-dasharray="4" />
+          <!-- Chart grid lines - updated styling -->
+          <line x1="40" y1="95" x2="300" y2="95" stroke="hsl(var(--border))" stroke-width="0.5" stroke-dasharray="4" />
           
           <!-- Volume bars if enabled -->
           <g v-if="showVolume && hasMultipleDataPoints">
@@ -98,7 +111,7 @@
                 :y="180 - (point.normalizedVolume * 40)" 
                 :width="Math.max(barWidth - 1, 1)" 
                 :height="point.normalizedVolume * 40"
-                :fill="point.close >= point.open ? 'rgba(22, 163, 74, 0.2)' : 'rgba(220, 38, 38, 0.2)'"
+                :fill="point.close >= point.open ? 'hsl(var(--success) / 0.2)' : 'hsl(var(--destructive) / 0.2)'"
               />
             </template>
           </g>
@@ -108,7 +121,7 @@
             v-if="showMA && movingAveragePath && movingAveragePath.length > 0"
             :points="movingAveragePath"
             fill="none"
-            stroke="#6366f1"
+            stroke="hsl(var(--primary))"
             stroke-width="1.5"
             stroke-dasharray="2"
           />
@@ -119,7 +132,7 @@
               v-if="chartPath && chartPath.length > 0"
               :points="chartPath"
               fill="none"
-              :stroke="parseFloat(stockData.return) >= 0 ? '#16a34a' : '#dc2626'"
+              :stroke="parseFloat(stockData.return) >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))'"
               stroke-width="2"
             />
           </template>
@@ -132,7 +145,7 @@
                 :y1="point.highY" 
                 :x2="40 + (index * barWidth) + (barWidth / 2)" 
                 :y2="point.lowY"
-                stroke="#718096"
+                stroke="hsl(var(--border))"
                 stroke-width="1"
               />
               
@@ -142,7 +155,7 @@
                 :y="Math.min(point.openY, point.closeY)" 
                 :width="barWidth * 0.8" 
                 :height="Math.max(2, Math.abs(point.closeY - point.openY))"
-                :fill="point.close >= point.open ? '#16a34a' : '#dc2626'"
+                :fill="point.close >= point.open ? 'hsl(var(--success))' : 'hsl(var(--destructive))'"
               />
             </template>
           </template>
@@ -150,11 +163,11 @@
           <!-- End point marker for line chart -->
           <circle 
             v-if="selectedChartType === 'line' && endPoint && typeof endPoint.x === 'number' && !isNaN(endPoint.x) && 
-                  typeof endPoint.y === 'number' && !isNaN(endPoint.y)"
+                    typeof endPoint.y === 'number' && !isNaN(endPoint.y)"
             :cx="endPoint.x" 
             :cy="endPoint.y" 
             r="4" 
-            :fill="parseFloat(stockData.return) >= 0 ? '#16a34a' : '#dc2626'" 
+            :fill="parseFloat(stockData.return) >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))'" 
           />
         </svg>
       </div>
@@ -162,22 +175,20 @@
     
     <!-- Chart footer -->
     <div class="p-4 border-t flex justify-between items-center">
-      <div class="text-sm text-gray-500">
-        Period: <span class="font-medium">{{ getPeriodLabel() }}</span>
+      <div class="text-sm text-muted-foreground">
+        Period: <span class="font-medium text-foreground">{{ getPeriodLabel() }}</span>
       </div>
       <div :class="[
-        'flex items-center text-sm font-medium',
-        parseFloat(stockData.return) >= 0 ? 'text-green-600' : 'text-red-600'
+        'flex items-center text-sm font-medium rounded-full px-2 py-1',
+        parseFloat(stockData.return) >= 0 ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
       ]">
-        <svg v-if="parseFloat(stockData.return) >= 0" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+        <svg v-if="parseFloat(stockData.return) >= 0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
           <path d="m18 9-6-6-6 6"/>
-          <path d="M6 20h12"/>
-          <path d="M12 3v17"/>
+          <path d="M12 3v12"/>
         </svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
           <path d="m18 15-6 6-6-6"/>
-          <path d="M6 4h12"/>
-          <path d="M12 20V3"/>
+          <path d="M12 9v12"/>
         </svg>
         Total Return: {{ stockData.return }}
       </div>
@@ -487,15 +498,24 @@ const xAxisLabels = computed(() => {
 
 // Format price as USD with appropriate precision
 const formatPrice = (price: number): string => {
-  // Use fewer decimal places for larger numbers
-  const decimalPlaces = price > 1000 ? 0 : (price > 100 ? 1 : 2)
+  if (isNaN(price) || price === null || price === undefined) {
+    return '$0';
+  }
   
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimalPlaces,
-    maximumFractionDigits: decimalPlaces
-  }).format(price)
+  // For larger numbers, use K/M/B format
+  if (price >= 1_000_000_000) {
+    return `$${(price / 1_000_000_000).toFixed(1)}B`;
+  } 
+  if (price >= 1_000_000) {
+    return `$${(price / 1_000_000).toFixed(1)}M`;
+  }
+  if (price >= 1_000) {
+    return `$${(price / 1_000).toFixed(1)}K`;
+  }
+  
+  // For smaller numbers, show appropriate decimal places
+  const decimalPlaces = price < 10 ? 2 : (price < 100 ? 1 : 0);
+  return `$${price.toFixed(decimalPlaces)}`;
 }
 
 // Calculate Y position for a given price value

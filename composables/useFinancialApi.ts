@@ -17,7 +17,7 @@ interface StockData {
         close: number;
         volume: number;
     }>;
-    isMockData?: boolean; // Flag to indicate mock data
+    isMockData: boolean; // We'll keep this for future API status tracking
 }
 
 // Define API response interface
@@ -35,11 +35,6 @@ interface ApiResponse {
         }>;
     }>;
     [key: string]: any; // Allow for other properties
-}
-
-// Define mock data type
-interface MockDataMap {
-    [key: string]: StockData;
 }
 
 // Add interfaces for company data
@@ -91,318 +86,61 @@ export const useFinancialApi = () => {
         lastQuery.value = query
 
         try {
-            console.log(`Querying financial data for: "${query}"`)
+            // Add a timestamp to ensure each query is unique, even for identical text
+            const timestamp = Date.now()
+            console.log(`Querying API for: ${query} (timestamp: ${timestamp})`)
 
-            // Keep track of attempts to allow retrying for timeouts
-            let attempts = 0
-            const maxAttempts = 2
-            let result: ApiResponse | null = null
-            let lastError = null
+            const response = await fetch("/api/financial/query", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    query,
+                    timestamp, // Add timestamp to ensure uniqueness
+                    forceRefresh: true // Explicitly request fresh data
+                })
+            })
 
-            // First try to get OHLCV data (historical price data)
-            console.log('Fetching historical OHLCV data first...')
-            let ohlcvData: ApiResponse | null = null
-
-            try {
-                // First date = 1 year ago, format: DD.MM.YYYY
-                const oneYearAgo = new Date()
-                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-                const formattedDate = `${oneYearAgo.getDate().toString().padStart(2, '0')}.${(oneYearAgo.getMonth() + 1).toString().padStart(2, '0')}.${oneYearAgo.getFullYear()}`
-
-                console.log(`Requesting OHLCV data from ${formattedDate} to present`)
-
-                // Use the OHLCV endpoint for historical data
-                ohlcvData = await $fetch('/api/financial/ohlcv', {
-                    method: 'POST',
-                    query: { query, first: formattedDate },
-                    body: {},
-                    timeout: API_CONFIG.timeout
-                }) as ApiResponse
-
-                console.log('OHLCV data received:', ohlcvData ? 'success' : 'empty')
-
-                // If we got OHLCV data, process it directly using processHistoricalPriceData
-                if (ohlcvData && !ohlcvData.error) {
-                    // Add ohlcv to available tools
-                    if (!availableTools.value.includes('ohlcv')) {
-                        availableTools.value.push('ohlcv')
-                    }
-
-                    // Try different ways to find the data in the response
-                    let toolMessage = null
-                    let hasProcessedData = false
-
-                    // First check if there's a tool message with an item property
-                    if (ohlcvData.messages) {
-                        // First try to find a tool message with an item property
-                        toolMessage = ohlcvData.messages.find(msg => msg.type === 'tool' && msg.item)
-
-                        // If not found, try any message with item property
-                        if (!toolMessage) {
-                            toolMessage = ohlcvData.messages.find(msg => msg.item)
-                        }
-
-                        // If still not found, try the third message which is often the tool message
-                        if (!toolMessage && ohlcvData.messages.length >= 3) {
-                            toolMessage = ohlcvData.messages[2]
-                        }
-
-                        // If still not found and we have AI message with content, try using that as fallback
-                        if (!toolMessage) {
-                            toolMessage = ohlcvData.messages.find(msg => msg.type === 'ai' && msg.content)
-                        }
-                    }
-
-                    // Try direct processing if we found a message
-                    if (toolMessage) {
-                        console.log("Found potential tool message for OHLCV data processing",
-                            toolMessage.type,
-                            toolMessage.item ? "has item" : "no item",
-                            toolMessage.content ? "has content" : "no content")
-
-                        // Process the historical price data
-                        const processedData = processHistoricalPriceData(toolMessage, { query })
-
-                        if (processedData) {
-                            console.log("Successfully processed OHLCV data")
-                            stockPriceData.value = processedData
-                            isMockData.value = false
-                            return processedData
-                        }
-                    } else {
-                        console.warn("No suitable message found in OHLCV response")
-                    }
-
-                    // Direct extraction approach if no tool message found
-                    if (!hasProcessedData && ohlcvData.messages) {
-                        console.log("Trying direct extraction from any message content")
-                        // Try to find data in any message content
-                        for (const message of ohlcvData.messages) {
-                            if (message.content && (
-                                message.content.includes('date') ||
-                                message.content.includes('open') ||
-                                message.content.includes('close')
-                            )) {
-                                const mockToolMessage = {
-                                    type: 'tool',
-                                    content: message.content,
-                                    item: message.item || undefined
-                                }
-
-                                const processedData = processHistoricalPriceData(mockToolMessage, { query })
-                                if (processedData) {
-                                    console.log("Successfully processed OHLCV data via direct extraction")
-                                    stockPriceData.value = processedData
-                                    isMockData.value = false
-                                    return processedData
-                                }
-                            }
-                        }
-                    }
-                }
-
-                console.log("OHLCV data not available or couldn't be processed, falling back to summary data")
-            } catch (ohlcvErr) {
-                console.warn("Error fetching OHLCV data:", ohlcvErr)
-                // Continue to fallback summary data
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`)
             }
 
-            // After the OHLCV fallback section, add company data search before general query fallback
-            try {
-                console.log("Trying Company Data Search next...")
+            const apiResponse: ApiResponse = await response.json()
+            console.log("API Response:", apiResponse)
 
-                // Check if the query looks like it's asking for company data
-                // This is a heuristic check - queries with format like '{"Company": "employees|2023"}'
-                const isCompanyDataQuery = query.includes('{') && query.includes('}') &&
-                    (query.includes('employee') || query.includes('revenue') ||
-                        query.includes('market') || query.includes('ratio'));
-
-                if (isCompanyDataQuery) {
-                    const companyResult = await $fetch('/api/financial/companydatasearch', {
-                        method: 'POST',
-                        query: { query },
-                        body: {},
-                        timeout: API_CONFIG.timeout
-                    }) as ApiResponse;
-
-                    console.log('Company data search result received:', companyResult ? 'success' : 'empty');
-
-                    if (companyResult && !companyResult.error) {
-                        // Add companydatasearch to available tools
-                        if (!availableTools.value.includes('companydatasearch')) {
-                            availableTools.value.push('companydatasearch');
-                        }
-
-                        // Find the tool message that contains the company data
-                        let toolMessage = null;
-                        if (companyResult.messages) {
-                            // First try to find a tool message with content (that's where company data is normally)
-                            toolMessage = companyResult.messages.find(msg => msg.type === 'tool' && msg.content);
-
-                            // If not found, try the third message which is often the tool message
-                            if (!toolMessage && companyResult.messages.length >= 3) {
-                                toolMessage = companyResult.messages[2];
-                            }
-                        }
-
-                        if (toolMessage) {
-                            // Process the company data
-                            const processedData = processCompanyData(toolMessage, { query });
-
-                            if (processedData) {
-                                console.log("Successfully processed company data");
-                                companyInfoData.value = processedData;
-
-                                // If we also have stock price data, use that as the main return value
-                                if (stockPriceData.value) {
-                                    return stockPriceData.value;
-                                }
-
-                                // Otherwise, we need a stock data object to return
-                                // Create a basic stock data object from company data
-                                const firstCompany = Object.keys(processedData)[0];
-                                if (firstCompany) {
-                                    const mockStockForCompany = getMockStockData(firstCompany);
-                                    mockStockForCompany.isMockData = false; // Not really mock since we have real company data
-                                    isMockData.value = false;
-                                    return mockStockForCompany;
-                                }
-                            }
-                        } else {
-                            console.warn("No tool message found in company data response");
-                        }
-                    }
-                } else {
-                    console.log("Query doesn't appear to be a company data query, skipping company data search");
-                }
-            } catch (companyErr) {
-                console.warn("Error fetching company data:", companyErr);
-                // Continue to regular query endpoint
+            // Check if the response indicates an error
+            if (apiResponse.error) {
+                console.log("API response contains an error flag")
+                throw new Error(apiResponse.message || "API returned an error response")
             }
 
-            // Fallback to regular query endpoint
-            // Retry loop for handling timeouts
-            while (attempts < maxAttempts) {
-                attempts++
-                try {
-                    console.log(`API query attempt ${attempts}/${maxAttempts}`)
+            // Process the response
+            const processedData = processApiResponse(apiResponse)
 
-                    // Use our server proxy endpoint that forwards to /query?query={query}
-                    result = await $fetch('/api/financial/query', {
-                        method: 'POST',
-                        query: { query },
-                        body: {}, // Empty object to match the server proxy implementation
-                        timeout: API_CONFIG.timeout
-                    }) as ApiResponse
-
-                    console.log('API response received, status:', result ? 'success' : 'empty')
-
-                    // Check if the response contains an error flag (added in our proxy)
-                    if (result?.error) {
-                        lastError = result.message
-                        // If it's a timeout error, try again
-                        if (result.isTimeout) {
-                            console.log('Timeout detected, will retry if attempts remain')
-                            if (attempts < maxAttempts) {
-                                // Wait before retrying
-                                await new Promise(resolve => setTimeout(resolve, 1000))
-                                continue
-                            }
-                        }
-                        // Non-timeout error or max attempts reached
-                        throw new Error(result.message || 'API error')
-                    }
-
-                    // Successfully received a response
-                    break
-                } catch (e) {
-                    lastError = e
-                    console.warn(`API query attempt ${attempts} failed:`, e)
-
-                    // Check if we should retry (for timeout errors)
-                    const isTimeout = e instanceof Error && e.message.includes('timeout')
-                    if (isTimeout && attempts < maxAttempts) {
-                        console.log('Timeout detected, will retry')
-                        // Wait before retrying
-                        await new Promise(resolve => setTimeout(resolve, 1000))
-                        continue
-                    }
-
-                    // Either not a timeout or max attempts reached
-                    throw e
-                }
-            }
-
-            data.value = result
-
-            // Process the API response if we have a result
-            let processedData: StockData | null = null
-            if (result) {
-                processedData = processApiResponse(result)
-            } else {
-                console.warn("No API response received")
-            }
-
-            // If processing returned null, use mock data
             if (!processedData) {
-                console.warn("API response couldn't be processed, falling back to mock data")
-                processedData = getMockStockData(query)
-                isMockData.value = true // Set this flag when we use mock data
-
-                // Log the specific reasons why processing failed
-                if (!result) {
-                    console.warn("Reason: Empty API response")
-                } else if (!result.messages) {
-                    console.warn("Reason: No messages in API response")
-                } else {
-                    const aiMessage = result.messages.find((msg) => msg.type === 'ai')
-                    if (!aiMessage) {
-                        console.warn("Reason: No AI message in response")
-                    } else if (!aiMessage.tool_calls || !aiMessage.tool_calls.length) {
-                        console.warn("Reason: No tool calls in AI message")
-                    } else {
-                        const toolCall = aiMessage.tool_calls[0]
-                        const toolResponse = result.messages.find(
-                            (msg) => msg.type === 'tool' && msg.tool_call_id === toolCall.id
-                        )
-                        if (!toolResponse) {
-                            console.warn(`Reason: No tool response for tool call ID: ${toolCall.id}`)
-                        } else {
-                            console.warn(`Reason: Error processing ${toolCall.name} data`)
-                        }
-                    }
-                }
-            } else {
-                // Successfully processed the API response, mark data as real
-                isMockData.value = false
-                console.log("Successfully processed API data:",
-                    processedData.symbol,
-                    `First: ${processedData.firstPrice}`,
-                    `Last: ${processedData.lastPrice}`,
-                    `Return: ${processedData.return}`,
-                    `Data points: ${processedData.priceData.length}`,
-                    `Mock: ${processedData.isMockData}`)
+                throw new Error("Invalid API response structure")
             }
 
-            // Make sure we don't have duplicate tools in the array
-            if (processedData) {
-                // Ensure no duplicate tools
-                availableTools.value = [...new Set(availableTools.value)]
+            console.log(`Processed data:`, {
+                symbol: processedData.symbol,
+                name: processedData.name,
+                priceData: processedData.priceData ? `${processedData.priceData.length} points` : 'None',
+                firstPrice: processedData.firstPrice,
+                lastPrice: processedData.lastPrice,
+                return: processedData.return,
+                timestamp // Log the timestamp for debugging
+            })
 
-                // Set the isMockData property on the result object to match our ref state
-                processedData.isMockData = isMockData.value
-                console.log(`Returning final data with isMockData flag: ${processedData.isMockData}`)
-            }
+            // Always set isMockData to false as we don't use mock data
+            isMockData.value = false
+            processedData.isMockData = false
+            console.log(`Returning data from API`)
 
             return processedData
         } catch (e) {
-            console.error("API error:", e)
-            error.value = e instanceof Error ? e.message : 'An unknown error occurred'
-
-            // Return mock data on error
-            console.warn("API error, using mock data instead")
-            isMockData.value = true // Set this flag when we use mock data
-            return getMockStockData(query)
+            console.error(`API query error:`, e)
+            error.value = e instanceof Error ? e.message : 'An unexpected error occurred'
+            // Don't use mock data - just throw the error
+            throw new Error(`Failed to get data from the API: ${error.value}`)
         } finally {
             isLoading.value = false
         }
@@ -436,9 +174,14 @@ export const useFinancialApi = () => {
         error.value = null
 
         try {
-            const queryParams: Record<string, string> = {
+            const timestamp = Date.now()
+            console.log(`Fetching OHLCV data for: "${query}" with timestamp: ${timestamp}`)
+
+            const queryParams: Record<string, string | number | boolean> = {
                 query,
-                first
+                first,
+                timestamp,
+                forceRefresh: true
             }
 
             if (last) {
@@ -448,7 +191,13 @@ export const useFinancialApi = () => {
             const result = await $fetch('/api/financial/ohlcv', {
                 method: 'POST',
                 query: queryParams,
-                body: {}, // Empty object instead of empty string
+                body: {
+                    query,
+                    first,
+                    last,
+                    timestamp,
+                    forceRefresh: true
+                }
             })
 
             return result
@@ -505,140 +254,6 @@ export const useFinancialApi = () => {
         }
     }
 
-    // Mock data implementation for testing
-    const getMockStockData = (query: string): StockData => {
-        // Extract ticker from query (simplistic approach)
-        const upperQuery = query.toUpperCase()
-        let ticker = 'TSLA'
-
-        // Try to determine ticker from query
-        if (upperQuery.includes('APPLE') || upperQuery.includes('AAPL')) ticker = 'AAPL'
-        else if (upperQuery.includes('TESLA') || upperQuery.includes('TSLA')) ticker = 'TSLA'
-        else if (upperQuery.includes('MICROSOFT') || upperQuery.includes('MSFT')) ticker = 'MSFT'
-        else if (upperQuery.includes('GOOGLE') || upperQuery.includes('GOOG')) ticker = 'GOOG'
-        else if (upperQuery.includes('NVIDIA') || upperQuery.includes('NVDA')) ticker = 'NVDA'
-        else if (upperQuery.includes('TATA') || upperQuery.includes('TATASTEEL')) ticker = 'TATASTEEL'
-
-        // Mock data based on ticker
-        const mockData: MockDataMap = {
-            'AAPL': {
-                symbol: 'AAPL',
-                name: 'Apple Inc.',
-                firstPrice: 148.56,
-                lastPrice: 183.79,
-                minPrice: 145.17,
-                maxPrice: 189.83,
-                return: '23.71%',
-                priceData: []
-            },
-            'TSLA': {
-                symbol: 'TSLA',
-                name: 'Tesla, Inc.',
-                firstPrice: 172.38,
-                lastPrice: 225.31,
-                minPrice: 138.82,
-                maxPrice: 248.42,
-                return: '30.70%',
-                priceData: []
-            },
-            'MSFT': {
-                symbol: 'MSFT',
-                name: 'Microsoft Corporation',
-                firstPrice: 337.22,
-                lastPrice: 407.46,
-                minPrice: 328.39,
-                maxPrice: 427.21,
-                return: '20.83%',
-                priceData: []
-            },
-            'GOOG': {
-                symbol: 'GOOG',
-                name: 'Alphabet Inc.',
-                firstPrice: 130.83,
-                lastPrice: 150.67,
-                minPrice: 117.34,
-                maxPrice: 153.92,
-                return: '15.16%',
-                priceData: []
-            },
-            'NVDA': {
-                symbol: 'NVDA',
-                name: 'NVIDIA Corporation',
-                firstPrice: 459.77,
-                lastPrice: 925.66,
-                minPrice: 430.15,
-                maxPrice: 974.85,
-                return: '101.33%',
-                priceData: []
-            },
-            'TATASTEEL': {
-                symbol: 'TATASTEEL',
-                name: 'Tata Steel Ltd.',
-                firstPrice: 156.80,
-                lastPrice: 158.54,
-                minPrice: 156.50,
-                maxPrice: 159.20,
-                return: '1.11%',
-                priceData: []
-            }
-        }
-
-        // Generate mock price data
-        const today = new Date()
-        const mockStockData = { ...mockData[ticker as keyof typeof mockData] }
-        mockStockData.isMockData = true // Explicitly set this flag for mock data
-        const priceData: StockData['priceData'] = []
-
-        // Generate daily data points for a full year (365 days)
-        for (let i = 365; i >= 0; i--) {
-            const date = new Date(today)
-            date.setDate(date.getDate() - i)
-
-            // Skip weekends for more realistic stock data
-            const dayOfWeek = date.getDay()
-            if (dayOfWeek === 0 || dayOfWeek === 6) {
-                continue; // Skip Saturday (6) and Sunday (0)
-            }
-
-            // Simple sinusoidal pattern for price variation with some randomness
-            const progress = i / 365
-            const amplitude = (mockStockData.maxPrice - mockStockData.minPrice) * 0.5
-            const center = (mockStockData.maxPrice + mockStockData.minPrice) / 2
-
-            // Add some random noise
-            const noise = Math.random() * amplitude * 0.2
-
-            // Add secondary waves for more natural looking price movement
-            const secondaryWave = Math.sin(progress * Math.PI * 8) * amplitude * 0.15
-
-            // For positive return, trend up; for negative, trend down
-            const trend = parseFloat(mockStockData.return) > 0
-                ? (1 - progress) * amplitude * 0.5
-                : progress * amplitude * 0.5
-
-            // Calculate the close price
-            const closePrice = center + Math.sin(progress * Math.PI * 4) * amplitude * 0.3 + noise + trend + secondaryWave
-
-            // Calculate open, high, low prices based on close price
-            const dailyVolatility = amplitude * 0.03 * (1 + Math.random())
-            const openPrice = closePrice * (1 + (Math.random() * 0.02 - 0.01))
-            const highPrice = Math.max(openPrice, closePrice) + Math.random() * dailyVolatility
-            const lowPrice = Math.min(openPrice, closePrice) - Math.random() * dailyVolatility
-
-            priceData.push({
-                date: date.toISOString().split('T')[0],
-                open: openPrice,
-                high: highPrice,
-                low: lowPrice,
-                close: closePrice,
-                volume: Math.floor(1000000 + Math.random() * 5000000)
-            })
-        }
-
-        mockStockData.priceData = priceData
-        return mockStockData
-    }
-
     const processApiResponse = (response: ApiResponse): StockData | null => {
         try {
             // Clear available tools
@@ -646,7 +261,7 @@ export const useFinancialApi = () => {
 
             if (!response || !response.messages) {
                 console.warn('Invalid API response structure')
-                return null
+                throw new Error('Invalid API response structure')
             }
 
             // Find tool call results in the response
@@ -670,8 +285,11 @@ export const useFinancialApi = () => {
             let hasProcessedData = false
 
             // Process OHLCV data for price history
-            if (availableTools.value.includes('ohlcv')) {
-                const ohlcvTool = toolCalls.find(call => call.name === 'ohlcv')
+            if (availableTools.value.includes('ohlcv') || availableTools.value.includes('Historical_Price_Data')) {
+                const ohlcvTool = toolCalls.find(call =>
+                    call.name === 'ohlcv' || call.name === 'Historical_Price_Data'
+                )
+
                 if (ohlcvTool) {
                     console.log('Processing OHLCV data')
                     const toolMessage = response.messages.find(msg =>
@@ -688,8 +306,11 @@ export const useFinancialApi = () => {
 
                         if (processedData) {
                             stockPriceData.value = processedData
-                            hasProcessedData = true
+                            return processedData
                         }
+                    } else {
+                        console.warn('No tool message found for OHLCV data')
+                        throw new Error('No tool message found for OHLCV data')
                     }
                 }
             }
@@ -698,38 +319,43 @@ export const useFinancialApi = () => {
             if (availableTools.value.includes('companydatasearch')) {
                 const companyDataTool = toolCalls.find(call => call.name === 'companydatasearch')
                 if (companyDataTool) {
-                    console.log('Processing company data search')
+                    console.log('Processing company data')
                     const toolMessage = response.messages.find(msg =>
                         msg.type === 'tool' &&
                         msg.tool_call_id === companyDataTool.id
                     )
 
-                    // Only process if we have a valid tool message
                     if (toolMessage) {
-                        const processedData = processCompanyData(
+                        const companyData = processCompanyData(
                             toolMessage,
                             companyDataTool.args
                         )
 
-                        if (processedData) {
-                            companyInfoData.value = processedData
-                            hasProcessedData = true
+                        if (companyData) {
+                            companyInfoData.value = companyData
+                            // We should still have stock data to return
+
+                            // If we already processed OHLCV data, use that
+                            if (stockPriceData.value) {
+                                return stockPriceData.value
+                            }
                         }
                     }
                 }
             }
 
-            // If no specific tool was processed, try to extract stock data from general response
-            if (!hasProcessedData) {
-                console.log('No specific tools processed, trying general stock data extraction')
-                return extractStockData(response)
+            // If we haven't returned data from a specific tool, try to extract general stock data
+            const extractedData = extractStockData(response)
+            if (extractedData) {
+                return extractedData
             }
 
-            // Return stock price data as primary result if available
-            return stockPriceData.value
+            // If we've made it here, we couldn't process the data
+            throw new Error('Could not extract valid stock data from the API response')
         } catch (e) {
             console.error('Error processing API response:', e)
-            return null
+            error.value = e instanceof Error ? e.message : 'An unexpected error occurred'
+            throw e
         }
     }
 
@@ -1149,8 +775,8 @@ export const useFinancialApi = () => {
                             volume: parseInt(stockInfo.vol || '0') || 0
                         }];
 
-                        // Use inferred company from args if available, otherwise use data from response
-                        const symbol = stockInfo['Ticker symbol'] || args?.inferredCompany || args?.company || 'TSLA';
+                        // Use company from args if available, otherwise use data from response
+                        const symbol = stockInfo['Ticker symbol'] || args?.company || 'Unknown';
 
                         // Return the processed stock data
                         return {
@@ -1162,7 +788,7 @@ export const useFinancialApi = () => {
                             maxPrice: highPrice,
                             return: returnValue,
                             priceData,
-                            isMockData: false // This is real data from the API
+                            isMockData: false
                         };
                     }
                 } catch (e) {
@@ -1207,8 +833,7 @@ export const useFinancialApi = () => {
                         console.log("Extracted stock data from content:", stockData);
 
                         // Extract key details from the extracted data
-                        // Use inferred company from args if available
-                        let symbol = args?.inferredCompany || 'TSLA'; // Use inferred company as default
+                        let symbol = 'Unknown'; // Default
                         let name = '';
 
                         // Look for ticker symbol in the extracted data
@@ -1235,40 +860,9 @@ export const useFinancialApi = () => {
                                 if (nameValue.length > 0) {
                                     name = nameValue;
                                     console.log(`Using extracted company name: ${name}`);
-
-                                    // If we found a name but no symbol, try to extract symbol from query
-                                    if (symbol === 'TSLA' && args?.query) {
-                                        const querySymbolMatch = args.query.match(/\b(TATA|TATASTEEL|NVDA|NVIDIA|AAPL|APPLE|MSFT|MICROSOFT|GOOG|GOOGLE)\b/i);
-                                        if (querySymbolMatch) {
-                                            const matchedTerm = querySymbolMatch[0].toUpperCase();
-
-                                            // Map matched terms to symbols
-                                            const symbolMap: Record<string, string> = {
-                                                'TATA': 'TATASTEEL',
-                                                'TATASTEEL': 'TATASTEEL',
-                                                'NVDA': 'NVDA',
-                                                'NVIDIA': 'NVDA',
-                                                'AAPL': 'AAPL',
-                                                'APPLE': 'AAPL',
-                                                'MSFT': 'MSFT',
-                                                'MICROSOFT': 'MSFT',
-                                                'GOOG': 'GOOG',
-                                                'GOOGLE': 'GOOG'
-                                            };
-
-                                            symbol = symbolMap[matchedTerm] || 'TSLA';
-                                            console.log(`Using symbol from query: ${symbol}`);
-                                        }
-                                    }
                                     break;
                                 }
                             }
-                        }
-
-                        // Use inferred company if we couldn't extract one
-                        if (symbol === 'TSLA' && args?.inferredCompany) {
-                            symbol = args.inferredCompany;
-                            console.log(`Using inferred company symbol: ${symbol}`);
                         }
 
                         // Parse numeric values - ensure they are numbers not strings
@@ -1293,12 +887,9 @@ export const useFinancialApi = () => {
 
                         console.log(`Parsed values: open=${firstPrice}, close=${lastPrice}, high=${highPrice}, low=${lowPrice}, vol=${volume}`);
 
-                        // If all prices are zero and we have an inferred company, use mock data
-                        if (firstPrice === 0 && lastPrice === 0 && highPrice === 0 && lowPrice === 0 && args?.inferredCompany) {
-                            console.log(`All prices are zero, using mock data for ${args.inferredCompany}`);
-                            const mockData = getMockStockData(args.inferredCompany);
-                            mockData.isMockData = true; // Mark as mock since we're not using real API data
-                            return mockData;
+                        // If all prices are zero, throw an error
+                        if (firstPrice === 0 && lastPrice === 0 && highPrice === 0 && lowPrice === 0) {
+                            throw new Error('Could not extract valid price data from response');
                         }
 
                         // Calculate return as percentage
@@ -1326,7 +917,7 @@ export const useFinancialApi = () => {
                             maxPrice: highPrice,
                             return: returnValue,
                             priceData,
-                            isMockData: false // This is real data from the API
+                            isMockData: false
                         };
                     }
                 } catch (e) {
@@ -1334,26 +925,11 @@ export const useFinancialApi = () => {
                 }
             }
 
-            // If we have an inferred company, return mock data as a last resort
-            if (args?.inferredCompany) {
-                console.log(`Using mock data for inferred company: ${args.inferredCompany}`);
-                const mockData = getMockStockData(args.inferredCompany);
-                mockData.isMockData = true;
-                return mockData;
-            }
-
             console.warn("No valid data found in summary response");
-            return null;
+            throw new Error("Could not extract valid data from summary response");
         } catch (e) {
             console.error('Error processing summary data:', e);
-
-            // Even in error case, check if we have an inferred company
-            if (args?.inferredCompany) {
-                console.log(`Error occurred, using mock data for inferred company: ${args.inferredCompany}`);
-                return getMockStockData(args.inferredCompany);
-            }
-
-            return null;
+            throw new Error(`Failed to process summary data: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
     }
 
@@ -1434,9 +1010,8 @@ export const useFinancialApi = () => {
 
     // Helper function to mark API as available/unavailable
     const setApiAvailable = (available: boolean) => {
-        // This function would be called by external components to force the state
-        isMockData.value = !available
-        console.log(`API availability manually set to: ${available}, isMockData: ${isMockData.value}`)
+        // We'll keep this function but not set isMockData anymore
+        console.log(`API availability set to: ${available}`)
     }
 
     // Add function to process company data
@@ -1636,48 +1211,6 @@ export const useFinancialApi = () => {
             // Try to identify specific companies from the query or response content
             const queryString = lastQuery.value.toLowerCase();
 
-            // Check for specific company names in the query
-            const isRequestingNvidia = queryString.includes('nvidia') || queryString.includes('nvda');
-            const isRequestingTataSteel = queryString.includes('tata') || queryString.includes('tatasteel');
-            const isRequestingApple = queryString.includes('apple') || queryString.includes('aapl');
-            const isRequestingTesla = queryString.includes('tesla') || queryString.includes('tsla');
-            const isRequestingMicrosoft = queryString.includes('microsoft') || queryString.includes('msft');
-            const isRequestingGoogle = queryString.includes('google') || queryString.includes('goog');
-
-            console.log(`Query analysis: Nvidia=${isRequestingNvidia}, Tata=${isRequestingTataSteel}, Apple=${isRequestingApple}, Tesla=${isRequestingTesla}, Microsoft=${isRequestingMicrosoft}, Google=${isRequestingGoogle}`);
-
-            // Infer company from query if specific company is mentioned
-            let inferredCompany: string | null = null;
-
-            if (isRequestingNvidia) inferredCompany = 'NVDA';
-            else if (isRequestingTataSteel) inferredCompany = 'TATASTEEL';
-            else if (isRequestingApple) inferredCompany = 'AAPL';
-            else if (isRequestingTesla) inferredCompany = 'TSLA';
-            else if (isRequestingMicrosoft) inferredCompany = 'MSFT';
-            else if (isRequestingGoogle) inferredCompany = 'GOOG';
-
-            if (inferredCompany) {
-                console.log(`Inferred company from query: ${inferredCompany}`);
-            }
-
-            // Check if response contains company information in any messages
-            let containsCompanyReference = false;
-            if (response.messages) {
-                for (const message of response.messages) {
-                    if (message.content) {
-                        const content = message.content.toLowerCase();
-                        if (content.includes('nvidia') || content.includes('nvda') ||
-                            content.includes('tata steel') || content.includes('apple') ||
-                            content.includes('tesla') || content.includes('microsoft') ||
-                            content.includes('google')) {
-                            containsCompanyReference = true;
-                            console.log('Found company reference in API response');
-                            break;
-                        }
-                    }
-                }
-            }
-
             // First try to find any summary data directly in the response
             // It could be in various formats, so we'll check multiple patterns
 
@@ -1705,8 +1238,7 @@ export const useFinancialApi = () => {
                             }
 
                             const processedData = processSummaryData(mockSummaryResponse, {
-                                query: lastQuery.value,
-                                inferredCompany: inferredCompany
+                                query: lastQuery.value
                             });
 
                             if (processedData && isDataValid(processedData)) {
@@ -1726,8 +1258,7 @@ export const useFinancialApi = () => {
                             if (itemData.tool === 'Summary' || itemData.tool === 'Show_Summary') {
                                 console.log('Found Summary tool item data');
                                 const processedData = processSummaryData(message, {
-                                    query: lastQuery.value,
-                                    inferredCompany: inferredCompany
+                                    query: lastQuery.value
                                 });
 
                                 if (processedData && isDataValid(processedData)) {
@@ -1759,13 +1290,13 @@ export const useFinancialApi = () => {
 
                                 // Create appropriate stock data object
                                 const stockData = {
-                                    symbol: data.symbol || data.name || (inferredCompany || lastQuery.value),
-                                    name: data.name || getStockName(data.symbol || (inferredCompany || lastQuery.value)),
-                                    firstPrice: typeof data.open === 'number' ? data.open : 100,
-                                    lastPrice: typeof data.close === 'number' ? data.close : 110,
-                                    minPrice: typeof data.low === 'number' ? data.low : 95,
-                                    maxPrice: typeof data.high === 'number' ? data.high : 115,
-                                    return: data.return || '10.00%',
+                                    symbol: data.symbol || data.name || lastQuery.value,
+                                    name: data.name || getStockName(data.symbol || lastQuery.value),
+                                    firstPrice: typeof data.open === 'number' ? data.open : 0,
+                                    lastPrice: typeof data.close === 'number' ? data.close : 0,
+                                    minPrice: typeof data.low === 'number' ? data.low : 0,
+                                    maxPrice: typeof data.high === 'number' ? data.high : 0,
+                                    return: data.return || '0.00%',
                                     priceData: data.priceData || [],
                                     isMockData: false
                                 };
@@ -1783,43 +1314,11 @@ export const useFinancialApi = () => {
                 }
             }
 
-            // If a company was mentioned in the query but we couldn't extract valid data,
-            // use the appropriate mock data
-            if (inferredCompany) {
-                console.log(`Using mock data for inferred company: ${inferredCompany}`);
-                const mockData = getMockStockData(inferredCompany);
-                mockData.isMockData = true;
-                return mockData;
-            }
-
-            // If all else fails but we have company references in the response
-            if (containsCompanyReference) {
-                console.log('Company reference found in response, trying to infer mock data');
-                const mockData = inferMockDataFromResponse(response);
-                return mockData;
-            }
-
-            // Absolute fallback - use general mock data
-            console.log('No valid stock data found in response, falling back to mock data');
-            return getMockStockData(lastQuery.value);
+            // If we couldn't find valid stock data, throw an error
+            throw new Error('Could not extract valid stock data from the API response');
         } catch (e) {
             console.error('Error in extractStockData:', e);
-
-            // Even in error case, check if we can infer a company
-            const queryString = lastQuery.value.toLowerCase();
-            if (queryString.includes('nvidia')) {
-                return getMockStockData('NVDA');
-            } else if (queryString.includes('tata')) {
-                return getMockStockData('TATASTEEL');
-            } else if (queryString.includes('apple')) {
-                return getMockStockData('AAPL');
-            } else if (queryString.includes('microsoft')) {
-                return getMockStockData('MSFT');
-            } else if (queryString.includes('google')) {
-                return getMockStockData('GOOG');
-            }
-
-            return getMockStockData(lastQuery.value);
+            throw e; // Don't fall back to mock data
         }
     }
 
@@ -1855,62 +1354,6 @@ export const useFinancialApi = () => {
 
         console.log(`Data validation passed for ${data.symbol}`);
         return true;
-    }
-
-    // Helper function to infer which company's mock data to return based on response
-    const inferMockDataFromResponse = (response: ApiResponse): StockData => {
-        // Look for company names in the response content
-        const companyReferences = {
-            'NVDA': 0,
-            'TATASTEEL': 0,
-            'AAPL': 0,
-            'TSLA': 0,
-            'MSFT': 0,
-            'GOOG': 0
-        };
-
-        const companyTerms = {
-            'NVDA': ['nvidia', 'nvda'],
-            'TATASTEEL': ['tata', 'tatasteel', 'tata steel'],
-            'AAPL': ['apple', 'aapl'],
-            'TSLA': ['tesla', 'tsla'],
-            'MSFT': ['microsoft', 'msft'],
-            'GOOG': ['google', 'goog', 'alphabet']
-        };
-
-        // Count references to each company in the messages
-        if (response.messages) {
-            for (const message of response.messages) {
-                if (message.content) {
-                    const content = message.content.toLowerCase();
-
-                    for (const [company, terms] of Object.entries(companyTerms)) {
-                        for (const term of terms) {
-                            if (content.includes(term)) {
-                                companyReferences[company as keyof typeof companyReferences]++;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Find the company with the most references
-        let maxReferences = 0;
-        let inferredCompany = 'TSLA'; // Default
-
-        for (const [company, count] of Object.entries(companyReferences)) {
-            if (count > maxReferences) {
-                maxReferences = count;
-                inferredCompany = company;
-            }
-        }
-
-        console.log(`Inferred company from response content: ${inferredCompany} (${maxReferences} references)`);
-        const mockData = getMockStockData(inferredCompany);
-        mockData.isMockData = true;
-        return mockData;
     }
 
     return {

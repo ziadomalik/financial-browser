@@ -54,9 +54,11 @@ const props = defineProps<{
 }>()
 
 // Format the metric name to be more readable
-const formatMetricName = (name: string): string => {
+const formatMetricName = (name: string | number): string => {
+  // Convert to string first
+  const nameStr = String(name);
   // Convert camelCase or snake_case to spaces and capitalize
-  return name
+  return nameStr
     .replace(/_/g, ' ')
     .replace(/([A-Z])/g, ' $1')
     .replace(/^\w/, c => c.toUpperCase())
@@ -64,22 +66,25 @@ const formatMetricName = (name: string): string => {
 }
 
 // Format metric value based on its type
-const formatMetricValue = (value: any, key: string): string => {
+const formatMetricValue = (value: any, key: string | number): string => {
   if (value === null || value === undefined) return 'N/A';
+  
+  // Convert key to string
+  const keyStr = String(key).toLowerCase();
   
   // Handle numbers that should be formatted as currency
   if (
     typeof value === 'number' && 
     (
-      key.toLowerCase().includes('revenue') || 
-      key.toLowerCase().includes('profit') || 
-      key.toLowerCase().includes('income') ||
-      key.toLowerCase().includes('sales') ||
-      key.toLowerCase().includes('assets') ||
-      key.toLowerCase().includes('liabilities') ||
-      key.toLowerCase().includes('capital') ||
-      key.toLowerCase().includes('market') ||
-      key.toLowerCase().includes('value')
+      keyStr.includes('revenue') || 
+      keyStr.includes('profit') || 
+      keyStr.includes('income') ||
+      keyStr.includes('sales') ||
+      keyStr.includes('assets') ||
+      keyStr.includes('liabilities') ||
+      keyStr.includes('capital') ||
+      keyStr.includes('market') ||
+      keyStr.includes('value')
     )
   ) {
     return formatCurrency(value);
@@ -89,12 +94,12 @@ const formatMetricValue = (value: any, key: string): string => {
   if (
     typeof value === 'number' && 
     (
-      key.toLowerCase().includes('margin') ||
-      key.toLowerCase().includes('ratio') ||
-      key.toLowerCase().includes('growth') ||
-      key.toLowerCase().includes('rate') ||
-      key.toLowerCase().includes('return') ||
-      key.toLowerCase().includes('percentage')
+      keyStr.includes('margin') ||
+      keyStr.includes('ratio') ||
+      keyStr.includes('growth') ||
+      keyStr.includes('rate') ||
+      keyStr.includes('return') ||
+      keyStr.includes('percentage')
     )
   ) {
     return formatPercentage(value);
@@ -103,7 +108,7 @@ const formatMetricValue = (value: any, key: string): string => {
   // Handle employee counts
   if (
     typeof value === 'number' && 
-    key.toLowerCase().includes('employee')
+    keyStr.includes('employee')
   ) {
     return value.toLocaleString();
   }
