@@ -1,7 +1,42 @@
 import { z } from 'zod'
-import { tool } from 'ai'
+import { generateObject, tool } from 'ai'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import FirecrawlApp from '@mendable/firecrawl-js'
+
+const createCrawlQueriesPrompt = `
+  The user is querying a browser that can crawl the web for financial information and news.
+  Your task is to generate a structured object following the FirecrawlQuerySchema:
+  
+  1. Create a clear, specific 'prompt' string that will guide the web crawler
+  2. Provide an array of 'relevantSites' (URLs) that are most likely to contain valuable financial information related to the query
+  
+  The process works like this:
+  1. The user types in a financial query or information need
+  2. You analyze this query and determine the best crawl strategy
+  3. The system will use your output to crawl these sites and return data from various sources
+  4. The crawled data should include both directly relevant information and contextually useful related content
+  5. All results should support the user's inferred financial research goals
+  
+  Focus on financial news sites, company investor relations pages, market data sources, and other authoritative financial information sources.
+`
+
+const FirecrawlQuerySchema = z.object({
+  prompt: z.string().describe('The prompt for the bot to crawl the sites'),
+  relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
+})
+
+const createCrawlQueries = async (query: string) => {
+  const { object } = await generateObject({
+    model: openai('gpt-4-turbo'),
+    schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
+    prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
+  });
+
+  console.log(object)
+
+  return object
+}
 
 export const filterCompaniesByCriteria = tool({
     description: `Get a list of companies filtered by certain criteria.`,
@@ -68,6 +103,145 @@ export const getCompanyStockSummary = tool({
     }
 })
 
+export const getCompanyData = tool({
+    description: `
+    This tool is useful when you need information about one or more companies, such as employee numbers, 
+    market or financial information, ratios, fundamentals, etc. 
+    `,
+    parameters: z.object({
+        query: z.array(z.object({
+            companyName: z.string().describe('The name of the company to search'),
+            informationToRetrieve: z.array(z.string()).describe('Short string saying the information to retrieve about the company'),
+            year: z.number().describe('The year of the information to retrieve')
+        }))
+    }),
+    async execute({ query }) {
+        console.log(`(getCompanyData) Making Request`)
+
+        const { apiBaseUrl } = useRuntimeConfig().public
+        // Convert the query array into a JSON string format
+        // Format: {"company1": "information to retrieve|yyyyQq"; "company2": "information to retrieve|yyyy"}
+        const queryObj: Record<string, string> = {}
+        
+        for (const item of query) {
+            const yearStr = item.year.toString()
+            const infoWithYear = `${item.informationToRetrieve.join(', ')}|${yearStr}`
+            queryObj[item.companyName] = infoWithYear
+        }
+        
+        const queryString = encodeURIComponent(JSON.stringify(queryObj).replace(/,/g, ';'))
+        
+        console.log(`(getCompanyData) Query String: ${queryString}`)
+        
+
+        const response = await $fetch(`${apiBaseUrl}/companydatasearch?query=${queryString}`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-type': 'application/json'
+            },
+            body: {},
+            timeout: 32000,
+        })
+        
+        console.log(`(getCompanyData) Done`)
+        
+        return response
+    }
+})
+
+export const getHistoricalStockPrice = tool({
+    description: `This tool is useful when you need information about a company's stock price history.`,
+    parameters: z.object({
+        query: z.string().describe('The name of the company to search'),
+        first: z.string().optional().describe('The first date of the stock price history to retrieve in dd.mm.yyyy format.'),
+        last: z.string().optional().describe('The last date of the stock price history to retrieve in dd.mm.yyyy format.'),
+    }),
+    async execute({ query, first, last }) {
+        console.log(`(getHistoricalStockPrice) Making Request`)
+
+        const { apiBaseUrl } = useRuntimeConfig().public
+
+        const response = await $fetch(`${apiBaseUrl}/ohlcv`, {
+            method: 'POST',
+            query: {
+                query,
+                first,
+                last
+            },
+            headers: {
+                'Accept': 'application/json',
+                'Content-type': 'application/json',
+            },
+            body: {},
+            timeout: 15000,
+        })
+
+        console.log(`(getHistoricalStockPrice) Done`)
+
+        return response
+    }
+})
+
+export const getCurrentNews = tool({
+    description: `This tool is useful when you need information about the latest news about a company.`,
+    parameters: z.object({
+        query: z.string().describe('A search query to retrieve the latest news about a company')
+    }),
+    async execute({ query }) {
+        console.log(`(getCurrentNews) Making Request`)
+
+        const { apiBaseUrl } = useRuntimeConfig().public
+        const { firecrawlApiKey } = useRuntimeConfig()
+
+        // Initialize Firecrawl client
+        const firecrawl = new FirecrawlApp({
+            apiKey: firecrawlApiKey
+        })
+
+        try {
+            // Get crawl queries
+            const { queries } = await createCrawlQueries(query)
+            
+            // Process the first query for immediate results
+            if (queries.length > 0) {
+                const q = queries[0]
+                
+                // Extract data using Firecrawl with the Zod schema
+                const result = await firecrawl.extract(
+                    q.relevantSites, 
+                    { 
+                        prompt: q.prompt,
+                        schema: z.object({ 
+                            findings: z.array(z.object({ 
+                                title: z.string(), 
+                                teaser: z.string().describe('Extremely short, couple word teaser'), 
+                                details: z.string().describe('A longer description of the finding') 
+                            })) 
+                        })
+                    }
+                )
+                
+                console.log(`(getCurrentNews) Done`)
+                return result
+            } else {
+                console.log(`(getCurrentNews) No queries generated`)
+                return { findings: [] }
+            }
+        } catch (error) {
+            console.error(`(getCurrentNews) Error:`, error)
+            return { 
+                findings: [{ 
+                    title: "Error retrieving news", 
+                    teaser: "Error occurred", 
+                    details: `Failed to retrieve news: ${error instanceof Error ? error.message : String(error)}` 
+                }] 
+            }
+        }
+        
+    }
+})
+
 // Centralized function for processing financial queries via AI
 export async function processFinancialQuery(query: string, context?: {
     recentActions?: string[],
@@ -103,11 +277,19 @@ export async function processFinancialQuery(query: string, context?: {
             model: openai('gpt-4o-mini'),
             tools: {
                 filterCompaniesByCriteria,
-                getCompanyStockSummary
+                getCompanyStockSummary,
+                getHistoricalStockPrice,
+                getCompanyData,
+                getCurrentNews
             },
             toolChoice: 'required',
-            system: systemPrompt,
-            prompt: query,
+            system: `
+            You are a helpful assistant that can filter companies by certain criteria and retrieve basic stock information.
+            You take the user queries and also enhance them to use more specific and accurate language.
+            Return your findings to the user in an easy to understand format.
+            DO NOT COMBINE THE TOOLS AT ALL, YOU DECIDE ON A TOOL, YOU'RE DONE.
+            `,
+            prompt: query as string,
             maxSteps: 1,
         })
 

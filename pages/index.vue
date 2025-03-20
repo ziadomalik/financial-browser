@@ -14,7 +14,7 @@
       <div class="absolute left-0 top-1/2 -translate-y-1/2 h-[30vh] border-l-4 rounded-full border-[#E9887580]/50"></div>
       <div class="flex flex-col items-center justify-center">
         <span class="text-2xl font-bold mb-4 text-[#DE3819]">SIXSense</span>
-        <SenseLogo />
+        <SenseLogo :animation="true" />
       </div>
     </div>
   </div>
