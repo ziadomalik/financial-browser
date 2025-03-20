@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 // Import the centralized query processor function
-import { processFinancialQuery } from '../api/six_data.get';
+import { processFinancialQuery } from '../api/six-data.get';
 
 // In-memory event queue
 interface UserEvent {
