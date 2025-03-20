@@ -25,17 +25,6 @@ const FirecrawlResultSchema = z.object({
   summary: z.string().optional().describe('Brief summary of the content')
 })
 
-// Define the standardized response format
-const FirecrawlExtractResponse = z.object({
-  success: z.boolean().describe('Whether the extraction was successful'),
-  data: z.union([
-    FirecrawlResultSchema,
-    z.array(FirecrawlResultSchema)
-  ]).describe('Extracted data in a consistent format'),
-  status: z.enum(['completed', 'processing', 'failed', 'cancelled']).optional()
-    .describe('Status of the extraction job')
-})
-
 const createCrawlQueriesPrompt = `
   The user is querying a browser that can crawl the web for financial information and news.
   Your task is to generate a structured object following the FirecrawlQuerySchema:
