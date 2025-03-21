@@ -4,10 +4,10 @@ import { getSimplifiedAdaptiveCardSchema } from '../utils';
 
 export default defineEventHandler(async (event) => {
     try {
-        //  Query: Text & Raw Data: Tool call results.
-        const { query, rawData } = await readBody(event) as { query?: string, rawData: object }
+        //  userQuery: Text & Raw Data: Tool call results (JSON).
+        const { userQuery, toolCallJsonResult } = await readBody(event) as { userQuery?: string, toolCallJsonResult: object }
 
-        if (!rawData) {
+        if (!toolCallJsonResult) {
             return {
                 error: true,
                 message: 'No raw data provided'
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
                     body: [
                         {
                             type: "TextBlock",
-                            text: `Results for: ${query || 'Unknown query'}`,
+                            text: `Results for: ${userQuery || 'Unknown userQuery'}`,
                             weight: "bolder",
                             size: "medium"
                         },
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
                         },
                         {
                             type: "TextBlock",
-                            text: JSON.stringify(rawData, null, 2),
+                            text: JSON.stringify(toolCallJsonResult, null, 2),
                             wrap: true,
                             isSubtle: true
                         }
@@ -51,16 +51,17 @@ export default defineEventHandler(async (event) => {
             output: 'array',
             schema,
             prompt: `
-            Based on the user query and the raw data, 
+            Based on the user userQuery and the raw data, 
             generate some adaptive cards to show in a dynamic dashbord.
 
-            User Query: ${query}
-            Raw Data: ${JSON.stringify(rawData)}
+            User query: ${userQuery}
+            Raw Data: ${JSON.stringify(toolCallJsonResult)}
 
             The adaptive cards should be succinct, read-only and simple.`
         })
 
         return response.toTextStreamResponse()
+        
     } catch (error) {
         console.error('Error in UI API:', error);
         return {

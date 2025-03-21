@@ -3,7 +3,7 @@
     <SInput 
         v-model="searchQuery"
         class="h-[50px] w-full rounded-full pl-12" 
-        placeholder="Search topics using your AI assistant" 
+        placeholder="Just type and insights will show" 
         @keyup.enter="handleSearch"
         :disabled="isLoading"
     />
@@ -25,17 +25,24 @@
             Search
         </span>
     </button>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { socket } from '../socket';
-import { useUserStore } from '~/stores/user';
+import { ref } from 'vue';
+
 
 const searchQuery = ref('');
+const result = ref<any>('')
 const isLoading = ref(false);
-const userStore = useUserStore();
+
+const { zodSchema } = await useAdaptiveSchema()
+
+const { object: UiCards, submit } = useObject({
+    api: '/api/ui',
+    schema: zodSchema.value!
+})
 
 // Handle search event
 const handleSearch = async () => {
@@ -43,66 +50,43 @@ const handleSearch = async () => {
     
     // Set loading state
     isLoading.value = true;
+    result.value = ''
     
     try {
-        // Emit search event to socket
-        socket.emit('user-event', {
-            userId: userStore.userId || 'anonymous',
-            eventType: 'search',
-            eventData: {
-                query: searchQuery.value
-            }
-        });
-        
+        const response = await $fetch(`/api/six-data?query=${encodeURIComponent(searchQuery.value)}`)
+        console.log('[Six] Done Calling: ', response)
+        result.value = response
         // Track the search event using the Nuxt app
         const { $trackSearch } = useNuxtApp();
         if ($trackSearch) {
-            $trackSearch(searchQuery.value);
-        }
-        
-        // Define type for query result data
-        interface QueryResultData {
-            event: string;
-            result: string;
-            toolResults: any[];
-        }
-        
-        // Listen for query results
-        const queryResultHandler = (data: QueryResultData) => {
-            console.log('Received query result:', data);
-            isLoading.value = false;
-            
-            // Remove this event listener after processing
-            socket.off('query-result', queryResultHandler);
-        };
-        
-        // Add the event listener
-        socket.on('query-result', queryResultHandler);
-        
-        // Set a timeout to clear loading state in case response takes too long
-        setTimeout(() => {
-            isLoading.value = false;
-            socket.off('query-result', queryResultHandler);
-        }, 15000); // 15 second timeout
-        
-    } catch (error) {
-        console.error('Search error:', error);
-        isLoading.value = false;
-    }
-};
+            $trackSearch(searchQuery.value);}
 
-// Set up event listeners
-onMounted(() => {
-    // Make sure socket is connected and authenticated
-    if (!socket.connected) {
-        socket.connect();
+
+    } catch (error) {
+        console.error('[Six] API error', error);
+        isLoading.value = false;
+        result.value = {
+            error: true,
+            message: error instanceof Error ? error.message : 'Failed to fetch data from API'
+        }
+    } finally {}
+
+    try {
+        await submit({
+            userQuery: searchQuery.value,
+            toolCallJsonResult: result.value
+        }) // -> updates the UiCards object
+
+        console.log('UI Components rendered successfully')
+
+    } catch (error) {
+
+        console.error('Error rendering UI components:', error);
     }
     
-    if (userStore.isAuthenticated && userStore.userId) {
-        socket.emit('authenticate', {
-            userId: userStore.userId,
-            token: userStore.token
-        });
+    finally{
+        isLoading.value = false;
     }
-});
+
+}
 </script>

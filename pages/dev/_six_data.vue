@@ -22,7 +22,6 @@
 </template>
 
 <script setup lang="ts">
-import { z } from 'zod'
 import {ref, computed} from 'vue'
 
 const query = ref('')
