@@ -1,244 +1,247 @@
 <template>
-  <!-- 
-    Dashboard with integrated search functionality
-    - Search bar integrated in the header profile section
-    - Using the same handleSearch logic from Input.vue for consistency
-    - Socket connection for real-time visualization updates
-  -->
-  <div class="dashboard-container w-full h-full">
-    <!-- Header section -->
-    <div class="client-profile w-full h-[130px] bg-[#F6F6F6] rounded-[20px]">
-      <div class="profile-info mr-6">
-        <button class="menu-button">
-          <span class="hamburger"></span>
-        </button>
-        <div class="avatar bg-white flex items-center justify-center">
-            <Icon name="i-streamline-interface-setting-menu-2-button-parallel-horizontal-lines-menu-navigation-staggered-three-hamburger" class="size-6 text-[#292929] rounded-full" />
-        </div>
-        <div class="avatar bg-[#333] flex items-center justify-center overflow-hidden">
-            <img src="~/assets/images/Zeno-profile-picture.jpeg" alt="Zeno Hamers" class="w-full h-full object-cover" />
-        </div>
-        <div class="user-info">
-          <h2 class="text-[#3E3E3E] font-semibold">Zeno Hamers</h2>
-          <p class="text-[#626262] font-medium">Dashboard</p>
-        </div>
-      </div>
-      
-      <!-- Key customer profile characteristics -->
-      <div class="profile-characteristics flex-1 flex justify-center gap-3 mx-4 ml-2">
-        <div class="characteristic-item flex-1">
-          <span class="characteristic-label">Mandate:</span>
-          <span class="characteristic-value">Discretionary</span>
-        </div>
-        <div class="characteristic-item flex-1">
-          <span class="characteristic-label">Financial Literacy:</span>
-          <span class="characteristic-value">Medium</span>
-        </div>
-        <div class="characteristic-item flex-1">
-          <span class="characteristic-label">Risk Aversion:</span>
-          <span class="characteristic-value">High</span>
-        </div>
-      </div>
-      
-      <div class="right-section flex items-center">
-        <!-- Search bar -->
-        <div class="search-container flex items-center mr-4">
-          <div class="relative w-[280px]">
-            <SInput 
-              v-model="searchQuery"
-              class="h-[40px] w-full rounded-full pl-10" 
-              placeholder="Search insights..." 
-              @keyup.enter="handleSearch"
-              :disabled="isLoading"
-            />
-            <span class="absolute left-0 inset-y-0 flex items-center justify-center px-3">
-              <Icon v-if="!isLoading" name="i-ph-magnifying-glass" class="size-4 text-[#DE3819]" />
-              <div v-else class="animate-spin size-4 text-[#DE3819]">
-                <Icon name="i-ph-spinner" class="size-4" />
-              </div>
-            </span>
-            <button 
-              @click="handleSearch" 
-              class="absolute right-0 inset-y-0 flex items-center justify-center px-3"
-              :disabled="isLoading || !searchQuery.trim()"
-            >
-              <span 
-                class="px-2 py-1 rounded-full bg-[#DE3819] text-white text-xs font-medium" 
-                :class="{'opacity-70': isLoading || !searchQuery.trim()}"
-              >
-                Search
-              </span>
+  <!-- App wrapper with proper scrolling -->
+  <div class="app-wrapper">
+    <!-- 
+      Dashboard with integrated search functionality
+      - Search bar integrated in the header profile section
+      - Using the same handleSearch logic from Input.vue for consistency
+      - Socket connection for real-time visualization updates
+    -->
+    <div class="dashboard-wrapper">
+      <div class="dashboard-container w-full h-full">
+        <!-- Header section -->
+        <div class="client-profile w-full h-[130px] bg-[#F6F6F6] rounded-[20px]">
+          <div class="profile-info mr-6">
+            <button class="menu-button">
+              <span class="hamburger"></span>
             </button>
+            <div class="avatar bg-white flex items-center justify-center">
+                <Icon name="i-streamline-interface-setting-menu-2-button-parallel-horizontal-lines-menu-navigation-staggered-three-hamburger" class="size-6 text-[#292929] rounded-full" />
+            </div>
+            <div class="avatar bg-[#333] flex items-center justify-center overflow-hidden">
+                <img src="~/assets/images/Zeno-profile-picture.jpeg" alt="Zeno Hamers" class="w-full h-full object-cover" />
+            </div>
+            <div class="user-info">
+              <h2 class="text-[#3E3E3E] font-semibold">Zeno Hamers</h2>
+              <p class="text-[#626262] font-medium">Dashboard</p>
+            </div>
           </div>
-        </div>
-        
-        <div class="avatar bg-white flex items-center justify-center">
-          <Icon name="i-cuida-sliders-outline" class="size-6 text-[#292929] rounded-full" /> 
-        </div>
-      </div>
-    </div>
-
-    <!-- Main dashboard grid -->
-    <div class="dashboard-grid">
-      <!-- Stock tickers row -->
-      <div class="stock-tickers flex-col bg-[#F6F6F6] rounded-[20px] p-4">
-          <div class="flex gap-4">
-            <div class="ticker-card">
-              <h3>MSFT</h3>
-              <span class="percentage positive">+1.2%</span>
-              <div class="ticker-chart-area h-[60px]">
-                <Line v-if="msftTickerData" :data="msftTickerData" :options="tickerChartOptions" />
+          
+          <!-- Key customer profile characteristics -->
+          <div class="profile-characteristics flex-1 flex justify-center gap-3 mx-4 ml-2">
+            <div class="characteristic-item flex-1">
+              <span class="characteristic-label">Mandate:</span>
+              <span class="characteristic-value">Discretionary</span>
+            </div>
+            <div class="characteristic-item flex-1">
+              <span class="characteristic-label">Financial Literacy:</span>
+              <span class="characteristic-value">Medium</span>
+            </div>
+            <div class="characteristic-item flex-1">
+              <span class="characteristic-label">Risk Aversion:</span>
+              <span class="characteristic-value">High</span>
+            </div>
+          </div>
+          
+          <div class="right-section flex items-center">
+            <!-- Search bar -->
+            <div class="search-container flex items-center mr-4">
+              <div class="relative w-[280px]">
+                <SInput 
+                  v-model="searchQuery"
+                  class="h-[40px] w-full rounded-full pl-10" 
+                  placeholder="Search insights..." 
+                  @keyup.enter="handleSearch"
+                  :disabled="isLoading"
+                />
+                <span class="absolute left-0 inset-y-0 flex items-center justify-center px-3">
+                  <Icon v-if="!isLoading" name="i-ph-magnifying-glass" class="size-4 text-[#DE3819]" />
+                  <div v-else class="animate-spin size-4 text-[#DE3819]">
+                    <Icon name="i-ph-spinner" class="size-4" />
+                  </div>
+                </span>
+                <button 
+                  @click="handleSearch" 
+                  class="absolute right-0 inset-y-0 flex items-center justify-center px-3"
+                  :disabled="isLoading || !searchQuery.trim()"
+                >
+                  <span 
+                    class="px-2 py-1 rounded-full bg-[#DE3819] text-white text-xs font-medium" 
+                    :class="{'opacity-70': isLoading || !searchQuery.trim()}"
+                  >
+                    Search
+                  </span>
+                </button>
               </div>
             </div>
-            <div class="ticker-card">
-              <h3>AAPL</h3>
-              <span class="percentage positive">+2.1%</span>
-              <div class="ticker-chart-area h-[60px]">
-                <Line v-if="aaplTickerData" :data="aaplTickerData" :options="tickerChartOptions" />
+            
+            <div class="avatar bg-white flex items-center justify-center">
+              <Icon name="i-cuida-sliders-outline" class="size-6 text-[#292929] rounded-full" /> 
+            </div>
+          </div>
+        </div>
+
+        <!-- Main dashboard grid -->
+        <div class="dashboard-grid">
+          <!-- Stock tickers row -->
+          <div class="stock-tickers flex-col bg-[#F6F6F6] rounded-[20px] p-4">
+              <div class="flex gap-4">
+                <div class="ticker-card">
+                  <h3>MSFT</h3>
+                  <span class="percentage positive">+1.2%</span>
+                  <div class="ticker-chart-area h-[60px]">
+                    <Line v-if="msftTickerData" :data="msftTickerData" :options="tickerChartOptions" />
+                  </div>
+                </div>
+                <div class="ticker-card">
+                  <h3>AAPL</h3>
+                  <span class="percentage positive">+2.1%</span>
+                  <div class="ticker-chart-area h-[60px]">
+                    <Line v-if="aaplTickerData" :data="aaplTickerData" :options="tickerChartOptions" />
+                  </div>
+                </div>
+                <div class="ticker-card">
+                  <h3>AMZN</h3>
+                  <span class="percentage positive">+3.2%</span>
+                  <div class="ticker-chart-area h-[60px]">
+                    <Line v-if="amznTickerData" :data="amznTickerData" :options="tickerChartOptions" />
+                  </div>
+                </div>
+                <div class="add-ticker">
+                    <Icon name="i-ph-plus-thin" class="size-12 text-[#F96E53]" />
+                </div>
+              </div>
+              <!-- Compare performance section -->
+              <div class="compare-section">
+                <h3>Compare performance</h3>
+                <p>Related</p>
+              </div>
+          </div>
+
+
+          <!-- Stock performance card -->
+          <div class="performance-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
+            <div class="bg-white rounded-[25px] p-3 mb-2">
+                <div class="card-header flex justify-between items-center mb-2">
+                <span class="chart-icon">
+                    <Icon name="i-ph-chart-line-up" class="size-5 text-gray-700" />
+                </span>
+                <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>117.52USD</span>
+                </div>
+                <div class="chart-area h-[180px] mb-2">
+                <div class="relative h-full w-full">
+                  <Line v-if="msftChartData" :data="msftChartData" :options="msftChartOptions" />
+                  <p v-else>Loading MSFT Data...</p>
+                </div>
+                </div>
+            </div>
+            <div class="card-footer flex justify-between items-center">
+              <h3 class="text-base font-semibold text-gray-800">Stock performance</h3>
+              <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
+                View <Icon name="i-ph-arrow-right" class="size-4" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Revenue Card -->
+          <div class="revenue-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
+            <div class="bg-white rounded-[25px] p-3 mb-2">
+                <div class="card-header flex justify-between items-center mb-2">
+                <span class="chart-icon">
+                    <Icon name="i-ph-money" class="size-5 text-gray-700" />
+                </span>
+                <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>29.4B</span>
+                </div>
+                <div class="chart-area h-[180px] mb-2">
+                <div class="relative h-full w-full">
+                  <Line v-if="aaplChartData" :data="aaplChartData" :options="aaplChartOptions" />
+                  <p v-else>Loading AAPL Data...</p>
+                </div>
+                </div>
+            </div>
+            <div class="card-footer flex justify-between items-center">
+              <h3 class="text-base font-semibold text-gray-800">Revenue</h3>
+              <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
+                View <Icon name="i-ph-arrow-right" class="size-4" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Forecast Card -->
+          <div class="forecast-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
+            <div class="bg-white rounded-[25px] p-3 mb-2">
+                <div class="card-header flex justify-between items-center mb-2">
+                <span class="chart-icon">
+                    <Icon name="i-ph-chart-bar" class="size-5 text-gray-700" />
+                </span>
+                <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>142.75USD</span>
+                </div>
+                <div class="chart-area h-[180px] mb-2">
+                <div class="relative h-full w-full">
+                  <Line v-if="amznChartData" :data="amznChartData" :options="amznChartOptions" />
+                  <p v-else>Loading AMZN Data...</p>
+                </div>
+                </div>
+            </div>
+            <div class="card-footer flex justify-between items-center">
+              <h3 class="text-base font-semibold text-gray-800">Price Forecast</h3>
+              <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
+                View <Icon name="i-ph-arrow-right" class="size-4" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Voice assistant area -->
+          <div class="voice-assistant">
+            <SenseLogo v-model:isListening="isListening" />
+            <p v-if="isListening" class="listening-text">Listening...</p>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="action-buttons-container">
+            <div class="action-buttons">
+              <button class="share-button flex items-center gap-3 rounded-full" @click="showSharePopup">
+                <Icon name="i-heroicons-share" class="size-5" />
+                <span>Share insights with Client</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Share Popup -->
+          <Transition name="fade">
+            <div v-if="isPopupVisible" class="share-popup-overlay" @click.self="closePopup">
+              <div class="share-popup">
+                <div class="popup-icon">
+                  <Icon name="i-heroicons-check-circle" class="size-12 text-[#34D399]" />
+                </div>
+                <h3 class="popup-title">Custom dashboard for {{ clientName }} created</h3>
+                <p class="popup-message">Copied to clipboard, share with one click</p>
+                <button @click="closePopup" class="popup-close-btn">
+                  <Icon name="i-heroicons-x-mark" class="size-5" />
+                </button>
               </div>
             </div>
-            <div class="ticker-card">
-              <h3>AMZN</h3>
-              <span class="percentage positive">+3.2%</span>
-              <div class="ticker-chart-area h-[60px]">
-                <Line v-if="amznTickerData" :data="amznTickerData" :options="tickerChartOptions" />
-              </div>
-            </div>
-            <div class="add-ticker">
-                <Icon name="i-ph-plus-thin" class="size-12 text-[#F96E53]" />
-            </div>
-          </div>
-          <!-- Compare performance section -->
-          <div class="compare-section">
-            <h3>Compare performance</h3>
-            <p>Related</p>
-          </div>
-      </div>
+          </Transition>
 
+          <!-- Toast Notification -->
+          <Transition name="toast">
+            <div v-if="isToastVisible" class="toast-notification">
+              <Icon name="i-heroicons-clipboard-document-check" class="size-5 mr-2 text-white" />
+              <span>Link copied to clipboard</span>
+            </div>
+          </Transition>
 
-      <!-- Stock performance card -->
-      <div class="performance-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
-        <div class="bg-white rounded-[25px] p-3 mb-2">
-            <div class="card-header flex justify-between items-center mb-2">
-            <span class="chart-icon">
-                <Icon name="i-ph-chart-line-up" class="size-5 text-gray-700" />
-            </span>
-            <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>117.52USD</span>
-            </div>
-            <div class="chart-area h-[180px] mb-2">
-            <div class="relative h-full w-full">
-              <Line v-if="msftChartData" :data="msftChartData" :options="msftChartOptions" />
-              <p v-else>Loading MSFT Data...</p>
-            </div>
-            </div>
-        </div>
-        <div class="card-footer flex justify-between items-center">
-          <h3 class="text-base font-semibold text-gray-800">Stock performance</h3>
-          <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
-            View <Icon name="i-ph-arrow-right" class="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Revenue Card -->
-      <div class="revenue-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
-        <div class="bg-white rounded-[25px] p-3 mb-2">
-            <div class="card-header flex justify-between items-center mb-2">
-            <span class="chart-icon">
-                <Icon name="i-ph-money" class="size-5 text-gray-700" />
-            </span>
-            <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>29.4B</span>
-            </div>
-            <div class="chart-area h-[180px] mb-2">
-            <div class="relative h-full w-full">
-              <Line v-if="aaplChartData" :data="aaplChartData" :options="aaplChartOptions" />
-              <p v-else>Loading AAPL Data...</p>
-            </div>
-            </div>
-        </div>
-        <div class="card-footer flex justify-between items-center">
-          <h3 class="text-base font-semibold text-gray-800">Revenue</h3>
-          <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
-            View <Icon name="i-ph-arrow-right" class="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Forecast Card -->
-      <div class="forecast-card bg-[#F6F6F6] rounded-[20px] p-4 shadow-sm">
-        <div class="bg-white rounded-[25px] p-3 mb-2">
-            <div class="card-header flex justify-between items-center mb-2">
-            <span class="chart-icon">
-                <Icon name="i-ph-chart-bar" class="size-5 text-gray-700" />
-            </span>
-            <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>142.75USD</span>
-            </div>
-            <div class="chart-area h-[180px] mb-2">
-            <div class="relative h-full w-full">
-              <Line v-if="amznChartData" :data="amznChartData" :options="amznChartOptions" />
-              <p v-else>Loading AMZN Data...</p>
-            </div>
-            </div>
-        </div>
-        <div class="card-footer flex justify-between items-center">
-          <h3 class="text-base font-semibold text-gray-800">Price Forecast</h3>
-          <button class="view-button bg-[#F96E53] text-white py-1 px-3 rounded-full flex items-center gap-1 text-sm">
-            View <Icon name="i-ph-arrow-right" class="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Voice assistant area -->
-      <div class="voice-assistant">
-        <SenseLogo v-model:isListening="isListening" />
-        <p v-if="isListening" class="listening-text">Listening...</p>
-      </div>
-
-      <!-- Action buttons -->
-      <div class="action-buttons">
-        <button class="insights-button">
-          More insights
-          <Icon name="i-heroicons-plus" class="size-5 text-white" />
-        </button>
-        <button class="share-button flex items-center gap-2 text-[#F96E53] border border-[#F96E53] rounded-full" @click="showSharePopup">
-          <span class="text-[#F96E53]">Share insights with Client</span>
-          <Icon name="i-heroicons-share" class="size-5 text-[#F96E53]" />
-        </button>
-      </div>
-
-      <!-- Share Popup -->
-      <Transition name="fade">
-        <div v-if="isPopupVisible" class="share-popup-overlay" @click.self="closePopup">
-          <div class="share-popup">
-            <div class="popup-icon">
-              <Icon name="i-heroicons-check-circle" class="size-12 text-[#34D399]" />
-            </div>
-            <h3 class="popup-title">Custom dashboard for {{ clientName }} created</h3>
-            <p class="popup-message">Copied to clipboard, share with one click</p>
-            <button @click="closePopup" class="popup-close-btn">
-              <Icon name="i-heroicons-x-mark" class="size-5" />
-            </button>
+          <!-- Query chips -->
+          <div class="query-chips">
+            <div class="chip volatile">" ...volatile..."</div>
+            <div class="chip tech">" ...leading tech..."</div>
+            <div class="chip nvidia">" Compare NVIDIA "</div>
+            <div class="chip administration">" ...new administration "</div>
+            <div class="chip crash">" market crash "</div>
+            <div class="chip msft">" MSFT "</div>
+            <div class="chip nasdaq">" NASDAQ "</div>
           </div>
         </div>
-      </Transition>
-
-      <!-- Toast Notification -->
-      <Transition name="toast">
-        <div v-if="isToastVisible" class="toast-notification">
-          <Icon name="i-heroicons-clipboard-document-check" class="size-5 mr-2 text-white" />
-          <span>Link copied to clipboard</span>
-        </div>
-      </Transition>
-
-      <!-- Query chips -->
-      <div class="query-chips">
-        <div class="chip volatile">" ...volatile..."</div>
-        <div class="chip tech">" ...leading tech..."</div>
-        <div class="chip nvidia">" Compare NVIDIA "</div>
-        <div class="chip administration">" ...new administration "</div>
-        <div class="chip crash">" market crash "</div>
-        <div class="chip msft">" MSFT "</div>
-        <div class="chip nasdaq">" NASDAQ "</div>
       </div>
     </div>
   </div>
@@ -246,6 +249,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+// Using type definition comments instead of imports to avoid module resolution issues
+// @ts-ignore
+interface ChartData<T extends string = any> {
+  labels?: any[];
+  datasets: {
+    label?: string;
+    data: any[];
+    borderColor?: string;
+    backgroundColor?: string;
+    tension?: number;
+    pointRadius?: number;
+    fill?: boolean;
+  }[];
+}
 
 const isListening = ref(false);
 const searchQuery = ref('');
@@ -799,11 +816,35 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.app-wrapper {
+  position: relative;
+  min-height: 100vh;
+  height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-wrapper {
+  min-height: 100vh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  position: relative;
+  padding-bottom: 150px; /* Extra padding at the bottom for fixed elements */
+}
+
 .dashboard-container {
   padding: 20px;
   border-radius: 20px;
   margin: 0 auto;
   font-family: 'Arial', sans-serif;
+  flex: 1;
+  width: 100%;
+  overflow-y: visible;
 }
 
 .client-profile {
@@ -887,6 +928,9 @@ onMounted(() => {
   grid-template-columns: repeat(12, 1fr);
   grid-gap: 15px;
   position: relative;
+  overflow: visible;
+  height: auto;
+  min-height: calc(100vh - 250px); /* Ensure minimum height to push content down */
 }
 
 .stock-tickers {
@@ -1024,39 +1068,73 @@ onMounted(() => {
   gap: 10px;
 }
 
-.action-buttons {
-  grid-column: 2 / 10;
-  grid-row: 5;
+.action-buttons-container {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 60px 80px 50px;
+  z-index: 100;
+  border-radius: 50%;
   display: flex;
-  gap: 15px;
   justify-content: center;
-}
-
-.insights-button, .share-button {
-  padding: 12px 20px;
-  border-radius: 30px;
-  display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
 }
 
-.insights-button {
-  background-color: #ff6b6b;
-  color: white;
+.action-buttons {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(6px);
+  border-radius: 40px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  transform: translateY(35px) scale(0.75);
+  opacity: 0.5;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.action-buttons-container:hover .action-buttons {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  background-color: rgba(255, 255, 255, 0.95);
 }
 
 .share-button {
-  background-color: white;
-  color: #333;
+  padding: 14px 24px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  background-color: #F96E53;
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.share-button:hover {
+  background-color: #e55a40;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(249, 110, 83, 0.3);
+}
+
+.share-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(249, 110, 83, 0.2);
 }
 
 .query-chips {
   grid-column: 10 / 13;
-  grid-row: 1 / 4;
+  grid-row: 1 / 5; /* Extend to row 5 to match action buttons */
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: relative;
+  height: auto;
 }
 
 .chip {
@@ -1096,12 +1174,13 @@ onMounted(() => {
 }
 
 .voice-assistant {
-  position: absolute;
-  right: 0px;
-  bottom: -100px;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  z-index: 101; /* Above action buttons */
 }
 
 .mic-button {
@@ -1148,6 +1227,7 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  overflow-y: auto;
 }
 
 .share-popup {
@@ -1246,5 +1326,18 @@ onMounted(() => {
 .toast-leave-to {
   transform: translate(-50%, 20px);
   opacity: 0;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-y: scroll !important; /* Force scrolling */
+  overflow-x: hidden;
+}
+
+#__nuxt, #__layout {
+  min-height: 100vh;
+  height: 100%;
 }
 </style>
