@@ -256,7 +256,8 @@ export async function processFinancialQuery(query: string, context?: {
             You are a helpful assistant that can filter companies by certain criteria and retrieve basic stock information.
             You take the user queries and also enhance them to use more specific and accurate language.
             Return your findings to the user in an easy to understand format.
-            DO NOT COMBINE THE TOOLS AT ALL, YOU DECIDE ON A TOOL, YOU'RE DONE.
+
+            You are able to run max 3 tools per query from the user. 
         `
 
         // Add context information if provided (for query planner use case)
@@ -265,11 +266,9 @@ export async function processFinancialQuery(query: string, context?: {
             User recent actions: ${context.recentActions?.join(', ') || 'None'}
             Current action: ${context.currentAction || 'None'}
             
-            Based on these interactions, determine if you should:
-            1. Search for companies by criteria
-            2. Get company stock summary information
+            Based on these interactions, determine what information might be most relevant to the user (what does he want to know) and what tools you should call.
             
-            Choose the most appropriate query based on the user's actions.
+            For each tool you want to call, provide to most appropriate query fitting the tools input schema.
             `
         }
 
@@ -285,7 +284,7 @@ export async function processFinancialQuery(query: string, context?: {
             toolChoice: 'required',
             system: systemPrompt,
             prompt: query as string,
-            maxSteps: 1,
+            maxSteps: 3,
         })
 
         // Extract tool results

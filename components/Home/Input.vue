@@ -56,6 +56,9 @@ const handleSearch = async () => {
     isLoading.value = true;
     result.value = ''
     
+
+
+
     try {
         const response = await $fetch(`/api/six-data?query=${encodeURIComponent(searchQuery.value)}`)
         console.log('[Six] Done Calling: ', response)
@@ -78,7 +81,7 @@ const handleSearch = async () => {
     try {
         console.log('userQuery: ', searchQuery.value)
         console.log('toolCallJsonResult: ', result.value)
-        
+
         await submit({
             userQuery: searchQuery.value,
             toolCallJsonResult: result.value
