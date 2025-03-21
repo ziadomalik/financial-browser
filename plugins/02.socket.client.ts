@@ -15,6 +15,17 @@ interface QueryResult {
     [key: string]: any
 }
 
+interface VisualizationData {
+    userId: string;
+    query: string;
+    text: string;
+    toolResults: any[];
+    adaptiveCards: any[];
+    timestamp: number;
+    isPartial: boolean;
+    stepNumber: number;
+}
+
 export default defineNuxtPlugin((nuxtApp) => {
     // This plugin only runs on the client side
     const socket = getSocket()
@@ -23,6 +34,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     const isConnected = ref(false)
     const queryResults = ref<QueryResult[]>([])
     const socketErrors = ref<SocketError[]>([])
+    const partialVisualizations = ref<VisualizationData[]>([])
+    const completeVisualizations = ref<VisualizationData[]>([])
 
     if (socket) {
         // Set up connection status
@@ -60,6 +73,47 @@ export default defineNuxtPlugin((nuxtApp) => {
             // Keep only the 10 most recent results
             if (queryResults.value.length > 10) {
                 queryResults.value = queryResults.value.slice(-10)
+            }
+        })
+
+        // Listen for partial visualization updates (incremental tool results)
+        socket.on('partial-visualization-update', (data: { userId: string, visualizationData: VisualizationData }) => {
+            console.log('Received partial visualization update:', data)
+
+            if (data?.visualizationData) {
+                // Add the new partial visualization
+                partialVisualizations.value.push(data.visualizationData)
+
+                // Keep only the 20 most recent partial visualizations
+                if (partialVisualizations.value.length > 20) {
+                    partialVisualizations.value = partialVisualizations.value.slice(-20)
+                }
+
+                // Notify any UI components that are listening for visualization updates
+                nuxtApp.hook('visualization:partial-update', data.visualizationData)
+            }
+        })
+
+        // Listen for complete visualization updates
+        socket.on('visualization-updates', (data: { userId: string, visualizationData: VisualizationData }) => {
+            console.log('Received complete visualization update:', data)
+
+            if (data?.visualizationData) {
+                // Add the complete visualization
+                completeVisualizations.value.push(data.visualizationData)
+
+                // Keep only the 10 most recent complete visualizations
+                if (completeVisualizations.value.length > 10) {
+                    completeVisualizations.value = completeVisualizations.value.slice(-10)
+                }
+
+                // Clear partial visualizations related to this query
+                partialVisualizations.value = partialVisualizations.value.filter(
+                    viz => viz.query !== data.visualizationData.query
+                )
+
+                // Notify any UI components that are listening for visualization updates
+                nuxtApp.hook('visualization:complete-update', data.visualizationData)
             }
         })
     } else {
@@ -120,6 +174,8 @@ export default defineNuxtPlugin((nuxtApp) => {
             isSocketConnected: isConnected,
             socketErrors,
             queryResults,
+            partialVisualizations,
+            completeVisualizations,
             eventTracker
         }
     }

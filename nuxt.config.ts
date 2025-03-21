@@ -38,6 +38,7 @@ export default defineNuxtConfig({
     newsApiKey: process.env.NEWS_API_KEY,
     apiBaseUrl: process.env.API_BASE_URL,
     finnhubApiKey: process.env.FINNHUB_API_KEY,
+    uiBaseUrl: 'http://localhost:3000',
   },
 
   // Explicitly set the port

@@ -1,9 +1,14 @@
 <template>
-  <div class="w-full h-full flex">
+  <div class="w-full h-full flex flex-col">
+    <!-- Left side content -->
     <div class="w-1/2 h-full overflow-hidden">
       <div class="h-full flex flex-col p-6 items-center justify-center">
         <img src="~/assets/images/six-logo.png" alt="logo" class="w-[100px] mb-6">
-        <HomeInput class="mb-5" />
+        
+        <!-- Search input with fixed width and centering -->
+        <div class="w-full flex justify-center mb-5">
+          <HomeInput />
+        </div>
         
         <!-- Add automatic visualizations component -->
         <div class="overflow-y-auto max-h-[60vh] w-full">
@@ -11,6 +16,8 @@
         </div>
       </div>
     </div>
+
+    <!-- Right side content -->
     <div class="w-1/2 h-full relative flex flex-col items-center justify-center">
       <div class="absolute left-0 top-1/2 -translate-y-1/2 h-[30vh] border-l-4 rounded-full border-[#E9887580]/50"></div>
       <div class="flex flex-col items-center justify-center">
@@ -19,7 +26,7 @@
       </div>
     </div>
     
-    <!-- Recording overlay that appears when recording starts -->
+    <!-- Recording overlay -->
     <div v-if="isRecording" class="fixed inset-0 bg-white/80 z-50 flex items-center justify-center transition-opacity duration-300">
       <button @click="stopAudio" class="absolute top-6 left-6 text-white hover:text-red-400 transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -32,6 +39,8 @@
         </div>
       </div>
     </div>
+    
+    <!-- Feed component -->
     <HomeFeed />
   </div>
 </template>

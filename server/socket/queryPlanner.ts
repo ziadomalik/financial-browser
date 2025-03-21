@@ -15,9 +15,12 @@ import { processFinancialQuery } from '../api/six-data.get';
 type JobError = Error & { message: string };
 
 // Redis connection configuration - Using Upstash Redis
-const connection = new IORedis("rediss://default:AZZ3AAIjcDFkMjgwYTY3NTgyN2M0NDhiOTM1N2JkYzQzNTVkODEwMHAxMA@super-colt-38519.upstash.io:6379", {
+export const connection = new IORedis("rediss://default:AZZ3AAIjcDFkMjgwYTY3NTgyN2M0NDhiOTM1N2JkYzQzNTVkODEwMHAxMA@super-colt-38519.upstash.io:6379", {
     maxRetriesPerRequest: null,
 });
+
+// Read UI base URL from environment or use default
+const UI_BASE_URL = process.env.UI_BASE_URL || 'http://localhost:3000';
 
 // ==========================================
 // QUEUE DEFINITIONS FOR THREE-STAGE PIPELINE
@@ -30,7 +33,7 @@ const interactionQueue = new Queue('interaction-query', { connection });
 const queryExecutionQueue = new Queue('query-execution', { connection });
 
 // 3. Results visualization 
-const visualizationQueue = new Queue('visualization', { connection });
+export const visualizationQueue = new Queue('visualization', { connection });
 
 // Queue event listeners for monitoring
 const interactionEvents = new QueueEvents('interaction-query', { connection });
@@ -81,7 +84,43 @@ interface QueryExecutionResult {
 // Results storage - Redis keys
 const USER_QUERIES_KEY_PREFIX = 'user:queries:';
 const USER_RESULTS_KEY_PREFIX = 'user:results:';
-const STORAGE_EXPIRY = 60 * 60; // 1 hour in seconds
+const STORAGE_EXPIRY = 60 * 60 * 3; // 3 hours in seconds
+const QUEUE_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
+
+// Setup periodic queue cleanup
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Clean up old jobs from the queues
+ * This helps prevent memory leaks and keeps Redis usage under control
+ */
+const cleanupOldJobs = async () => {
+    try {
+        console.log('[Queue Cleanup] Starting cleanup of old jobs...');
+
+        // Clean up completed jobs older than 1 hour
+        const completedOlderThan = 60 * 60 * 1000; // 1 hour in ms
+
+        // Clean up jobs from all three queues
+        await interactionQueue.clean(completedOlderThan, 1000, 'completed');
+        await queryExecutionQueue.clean(completedOlderThan, 1000, 'completed');
+        await visualizationQueue.clean(completedOlderThan, 1000, 'completed');
+
+        // Also clean up failed jobs older than 2 hours
+        const failedOlderThan = 60 * 60 * 2 * 1000; // 2 hours in ms
+        await interactionQueue.clean(failedOlderThan, 1000, 'failed');
+        await queryExecutionQueue.clean(failedOlderThan, 1000, 'failed');
+        await visualizationQueue.clean(failedOlderThan, 1000, 'failed');
+
+        console.log('[Queue Cleanup] Cleanup completed successfully');
+    } catch (error) {
+        console.error('[Queue Cleanup] Error cleaning up old jobs:', error);
+    }
+};
+
+// Schedule periodic cleanup
+cleanupInterval = setInterval(cleanupOldJobs, QUEUE_CLEANUP_INTERVAL);
+cleanupOldJobs(); // Run once at startup
 
 // ==========================================
 // PUBLIC FUNCTIONS
@@ -105,9 +144,17 @@ export const addUserEvent = async (userId: string, event: z.infer<typeof EventSc
             type: 'exponential',
             delay: 1000,
         },
+        removeOnComplete: {
+            age: 3600, // 1 hour in seconds
+            count: 1000
+        },
+        removeOnFail: {
+            age: 7200, // 2 hours in seconds
+            count: 100
+        }
     });
 
-    return job.id;
+    return job.id || `job-${Date.now()}`;
 };
 
 /**
@@ -342,6 +389,14 @@ const interactionWorker = new Worker('interaction-query', async (job: Job<UserEv
                     type: 'exponential',
                     delay: 1000,
                 },
+                removeOnComplete: {
+                    age: 3600, // 1 hour in seconds
+                    count: 1000
+                },
+                removeOnFail: {
+                    age: 7200, // 2 hours in seconds
+                    count: 100
+                }
             });
         }
 
@@ -391,6 +446,14 @@ const queryExecutionWorker = new Worker('query-execution', async (job: Job<Gener
                 type: 'exponential',
                 delay: 1000,
             },
+            removeOnComplete: {
+                age: 3600, // 1 hour in seconds
+                count: 1000 // Keep at most 1000 jobs
+            },
+            removeOnFail: {
+                age: 7200, // 2 hours in seconds
+                count: 100 // Keep at most 100 failed jobs
+            }
         });
 
         return executionResult;
@@ -404,27 +467,46 @@ const queryExecutionWorker = new Worker('query-execution', async (job: Job<Gener
  * Stage 3: Worker for visualizing results
  * Takes query results and prepares them for UI visualization
  */
-const visualizationWorker = new Worker('visualization', async (job: Job<QueryExecutionResult, any>) => {
+const visualizationWorker = new Worker('visualization', async (job: Job<QueryExecutionResult | any, any>) => {
     const resultData = job.data;
+    const isPartialResult = resultData.isPartial === true;
 
     try {
         // Call the UI adapter API to generate adaptive cards
-        const apiUrl = process.env.BASE_URL ? `${process.env.BASE_URL}/api/ui` : '/api/ui';
+        // Use the constant UI_BASE_URL for server-to-server communication
+        const apiUrl = new URL('/api/ui', UI_BASE_URL).toString();
+
+        console.log(`[Visualization] Making API request to ${apiUrl} (using base URL: ${UI_BASE_URL})`);
+
+        // Log whether this is a partial or complete result
+        if (isPartialResult) {
+            console.log(`[Visualization] Processing partial result (step ${resultData.stepNumber})`);
+        } else {
+            console.log(`[Visualization] Processing complete result`);
+        }
 
         // Prepare the payload that matches what the UI API expects
         const payload = {
             userQuery: resultData.query,
-            toolCallJsonResult: resultData.result.toolResults
+            toolCallJsonResult: resultData.result.toolResults,
+            isPartial: isPartialResult
         };
 
-        // Use Nuxt's $fetch instead of native fetch
+        // Use ofetch to make the HTTP request with the absolute URL
         const adaptiveCards = await $fetch(apiUrl, {
             method: 'POST',
-            body: payload
+            body: payload,
+            retry: 2,
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
         });
 
-        // Store the visualization result with the adaptive cards
-        const visualizationKey = `user:visualization:${resultData.userId}`;
+        // Generate a unique key for partial results if needed
+        const visualizationKey = isPartialResult
+            ? `user:visualization:partial:${resultData.userId}:${resultData.stepNumber}`
+            : `user:visualization:${resultData.userId}`;
 
         const visualizationData = {
             userId: resultData.userId,
@@ -432,28 +514,59 @@ const visualizationWorker = new Worker('visualization', async (job: Job<QueryExe
             text: resultData.result.text,
             toolResults: resultData.result.toolResults,
             adaptiveCards: adaptiveCards,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            isPartial: isPartialResult,
+            stepNumber: resultData.stepNumber || 0
         };
 
-        // Store in Redis for potential retrieval by the frontend
-        await connection.lpush(visualizationKey, JSON.stringify(visualizationData));
-        await connection.ltrim(visualizationKey, 0, 19); // Keep only latest 20
-        await connection.expire(visualizationKey, STORAGE_EXPIRY);
+        // Store in Redis - for partial results, we'll use a different pattern and shorter expiry
+        if (isPartialResult) {
+            // Store partial results with a shorter expiry time
+            await connection.set(visualizationKey, JSON.stringify(visualizationData));
+            await connection.expire(visualizationKey, 300); // 5 minute expiry for partial results
 
-        // Publish an event that can be listened to by the frontend
-        // This allows real-time updates without polling
-        await connection.publish('visualization-updates', JSON.stringify({
-            userId: resultData.userId,
-            type: 'new-visualization',
-            data: visualizationData
-        }));
+            // Publish partial result for immediate UI update
+            await connection.publish('partial-visualization-update', JSON.stringify({
+                userId: resultData.userId,
+                visualizationData,
+                timestamp: Date.now()
+            }));
+        } else {
+            // For complete results, use the standard approach
+            await connection.lpush(visualizationKey, JSON.stringify(visualizationData));
+            await connection.ltrim(visualizationKey, 0, 19); // Keep only latest 20
+            await connection.expire(visualizationKey, STORAGE_EXPIRY);
 
-        console.log(`Generated visualization for query: ${resultData.query.substring(0, 30)}...`);
+            // Publish an event that can be listened to by the frontend
+            await connection.publish('visualization-updates', JSON.stringify({
+                userId: resultData.userId,
+                visualizationData,
+                timestamp: Date.now()
+            }));
+        }
 
-        return visualizationData;
+        return {
+            success: true,
+            visualizationId: visualizationKey,
+            isPartial: isPartialResult
+        };
     } catch (error) {
-        console.error(`Error visualizing result: ${error}`);
-        throw error; // BullMQ will handle retries
+        console.error('[Visualization Worker] Error generating visualization:', error);
+
+        // Even on error, publish an error notification if this was a partial result
+        if (isPartialResult) {
+            try {
+                await connection.publish('partial-visualization-error', JSON.stringify({
+                    userId: resultData.userId,
+                    error: error instanceof Error ? error.message : String(error),
+                    timestamp: Date.now()
+                }));
+            } catch (publishError) {
+                console.error('[Visualization Worker] Error publishing error notification:', publishError);
+            }
+        }
+
+        throw new Error(`Visualization failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }, { connection });
 
@@ -505,7 +618,15 @@ visualizationEvents.on('waiting', ({ jobId }: { jobId: string }) => {
 // GRACEFUL SHUTDOWN HANDLERS
 // ==========================================
 
+// Cleanup when the server is shutting down
 process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, closing queues and connections');
+
+    // Clear the cleanup interval
+    if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+    }
+
     await Promise.all([
         interactionWorker.close(),
         queryExecutionWorker.close(),
@@ -515,6 +636,13 @@ process.on('SIGTERM', async () => {
 });
 
 process.on('SIGINT', async () => {
+    console.log('SIGINT received, closing queues and connections');
+
+    // Clear the cleanup interval
+    if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+    }
+
     await Promise.all([
         interactionWorker.close(),
         queryExecutionWorker.close(),

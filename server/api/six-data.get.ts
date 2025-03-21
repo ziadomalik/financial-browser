@@ -3,6 +3,7 @@ import { generateObject, tool } from 'ai'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import FirecrawlApp from '@mendable/firecrawl-js'
+import { visualizationQueue } from '../socket/queryPlanner'
 
 const createCrawlQueriesPrompt = `
   The user is querying a browser that can crawl the web for financial information and news.
@@ -272,6 +273,12 @@ export async function processFinancialQuery(query: string, context?: {
             `
         }
 
+        // Extract user ID from context if available
+        const userId = context?.currentAction ? context.currentAction.split(':')[0] : 'anonymous';
+
+        // Create a function to process steps incrementally as they complete
+        let processedStepsCount = 0;
+
         const { text, steps } = await generateText({
             model: openai('gpt-4o-mini'),
             tools: {
@@ -285,14 +292,54 @@ export async function processFinancialQuery(query: string, context?: {
             system: systemPrompt,
             prompt: query as string,
             maxSteps: 3,
-        })
+        });
 
-        // Extract tool results
+        // Process each step immediately for visualization
+        for (const step of steps) {
+            if (step.toolResults && step.toolResults.length > 0) {
+                processedStepsCount++;
+
+                // Prepare a partial result for this individual step
+                const partialResult = {
+                    userId,
+                    query,
+                    result: {
+                        text: '', // We don't have content at the step level, will be populated in final result
+                        toolResults: [step.toolResults[0]] // Just include this step's tool result
+                    },
+                    timestamp: Date.now(),
+                    isPartial: true,
+                    stepNumber: processedStepsCount
+                };
+
+                // Send to visualization queue for immediate UI updates
+                await visualizationQueue.add('partial-result', partialResult, {
+                    attempts: 3,
+                    backoff: {
+                        type: 'exponential',
+                        delay: 1000,
+                    },
+                    removeOnComplete: {
+                        age: 1800, // 30 minutes in seconds - partial results can expire faster
+                        count: 500  // Keep at most 500 partial results
+                    },
+                    removeOnFail: {
+                        age: 3600, // 1 hour in seconds
+                        count: 50  // Keep fewer failed partial results
+                    }
+                });
+
+                console.log(`[ProcessFinancialQuery] Sent partial tool result (${processedStepsCount}/${steps.length}) to visualization queue`);
+            }
+        }
+
+        // Extract all tool results for the final response
         const toolResults = steps.flatMap(step => step.toolResults || [])
 
+        // Return the complete result
         return {
             text,
-            toolResults,
+            toolResults
         }
 
     } catch (error) {
