@@ -92,8 +92,24 @@ async function transcribeAudioChunk(audioFilePath: string): Promise<string> {
             model: "whisper-1",
         })
         
-        console.log('Transcription successful')
-        return transcription.text
+        // Debug the raw response
+        console.log('Raw transcription:', JSON.stringify(transcription.text))
+        
+        // Process the response to ensure spaces
+        let processedText = transcription.text
+        
+        // Add aggressive text processing here too
+        processedText = processedText
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+            .replace(/([.,!?;:])/g, '$1 ')
+            .replace(/\s+/g, ' ')
+            .trim()
+        
+        console.log('Processed transcription:', processedText)
+        
+        // Return the processed text
+        return processedText
     } catch (error: any) {
         console.error('Transcription error:', {
             path: audioFilePath,

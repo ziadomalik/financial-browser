@@ -11,7 +11,14 @@
         <span class="text-[#DE3819]">Listening...</span>
       </div>
       <div v-if="transcription" class="mt-8 max-w-md p-4 bg-gray-50 rounded-lg text-gray-800 transcription-container">
-        <p class="transcription-text">{{ transcription }}</p>
+        <p class="transcription-text">
+          <template v-for="(word, index) in displayWords" :key="index">
+            <span :class="{'word-enter': word.isNew, 'word-exit': word.isExiting}">
+              {{ word.text }}
+            </span>
+            <span class="word-space"> </span>
+          </template>
+        </p>
       </div>
     </div>
   </div>
@@ -24,6 +31,8 @@ const router = useRouter()
 
 const tabId = route.query.tabId as string
 const transcription = ref('')
+const displayWords = ref<{text: string, isNew: boolean, isExiting: boolean, isLastInSentence: boolean}[]>([])
+const maxWords = 30 // Reduced from 50 to make buffer shorter
 const audioChunks: Blob[] = []
 let mediaRecorder: MediaRecorder | null = null
 let isRecording = ref(true)
@@ -114,12 +123,75 @@ const sendAudioChunk = async (audioBlob: Blob) => {
     })
     
     if (response.success && response.transcription) {
-      // Limit transcription to last ~50 words
-      const words = (transcription.value + ' ' + response.transcription).split(' ');
-      if (words.length > 50) {
-        transcription.value = words.slice(-50).join(' ');
-      } else {
-        transcription.value += ' ' + response.transcription;
+      console.log('Raw API response text:', JSON.stringify(response.transcription))
+      
+      // EXTREMELY AGGRESSIVE text processing
+      let processedText = response.transcription
+      
+      // Add a character-level inspection to see what might be happening
+      console.log('Character codes:', [...processedText].map(c => `${c}:${c.charCodeAt(0)}`))
+      
+      // Handle potential unicode space issues or zero-width spaces
+      processedText = processedText.replace(/[\u200B-\u200D\uFEFF]/g, ' ')
+      
+      // Force space between any letter/number and another letter/number of different case
+      processedText = processedText.replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+      processedText = processedText.replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      processedText = processedText.replace(/([0-9])([A-Za-z])/g, '$1 $2')
+      processedText = processedText.replace(/([A-Za-z])([0-9])/g, '$1 $2')
+      
+      // Add spaces around punctuation
+      processedText = processedText.replace(/([.,!?;:,])/g, '$1 ')
+      
+      // Break up obvious CamelCase and PascalCase patterns
+      processedText = processedText
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      
+      // Normalize multiple spaces to single space
+      processedText = processedText.replace(/\s+/g, ' ').trim()
+      
+      console.log('Processed text:', processedText)
+      
+      // Update the transcription value to ensure v-if works
+      transcription.value = processedText
+      
+      // Create a more clean way to split the words
+      const words = processedText.split(' ').filter(w => w.trim())
+      
+      const newWords = words.map((word, idx) => ({
+        text: word,
+        isNew: true, 
+        isExiting: false,
+        // Only mark a word as last in sentence if it ends with sentence-ending punctuation
+        // but still add spaces between words regardless
+        isLastInSentence: false
+      }))
+      
+      displayWords.value = [...displayWords.value, ...newWords]
+      
+      // After a short delay, remove the "new" status
+      setTimeout(() => {
+        displayWords.value = displayWords.value.map(word => ({
+          ...word,
+          isNew: false
+        }))
+      }, 500)
+      
+      // If we have too many words, mark oldest ones for exit animation
+      if (displayWords.value.length > maxWords) {
+        const excessCount = displayWords.value.length - maxWords
+        
+        // Mark words that will be removed as exiting
+        displayWords.value = displayWords.value.map((word, index) => ({
+          ...word,
+          isExiting: index < excessCount
+        }))
+        
+        // After animation completes, remove the exiting words
+        setTimeout(() => {
+          displayWords.value = displayWords.value.slice(excessCount)
+        }, 500) // Match this to the CSS transition duration
       }
     }
   } catch (error) {
@@ -211,6 +283,37 @@ onBeforeUnmount(() => {
   transition: transform 0.5s ease-out;
 }
 
+.transcription-text span {
+  display: inline-block;
+  transition: all 0.5s ease;
+}
+
+.word-enter {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fadeIn 0.4s forwards;
+}
+
+.word-exit {
+  opacity: 1;
+  transform: translateY(0);
+  animation: fadeOut 0.4s forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
 .transcription-container::before {
   content: '';
   position: absolute;
@@ -221,5 +324,11 @@ onBeforeUnmount(() => {
   background: linear-gradient(to bottom, rgba(249, 250, 251, 1), rgba(249, 250, 251, 0));
   pointer-events: none;
   z-index: 1;
+}
+
+/* Ensure spaces are visible */
+.word-space {
+  display: inline-block;
+  width: 0.3em;
 }
 </style> 
