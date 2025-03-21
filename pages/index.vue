@@ -281,6 +281,11 @@ import {
   LineElement
 } from 'chart.js'
 
+// Import stock data from JSON files
+import msftData from '~/data/msft_ohlcv.json';
+import appleData from '~/data/apple_ohlcv.json';
+import amznData from '~/data/amzn_ohlcv.json';
+
 // Register ALL required chart elements
 ChartJS.register(
   Title, 
@@ -539,17 +544,47 @@ const tickerChartOptions = {
 
 // --- Data and Options for MSFT ---
 const msftChartData = ref<ChartData<'line'> | null>(null);
-const msftChartOptions = ref(commonChartOptions);
+const msftChartOptions = ref({
+  ...commonChartOptions,
+  plugins: {
+    ...commonChartOptions.plugins,
+    tooltip: {
+      callbacks: {
+        label: (context) => `$${context.raw}`
+      }
+    }
+  }
+});
 const msftTickerData = ref<ChartData<'line'> | null>(null);
 
 // --- Data and Options for AAPL ---
 const aaplChartData = ref<ChartData<'line'> | null>(null);
-const aaplChartOptions = ref(commonChartOptions);
+const aaplChartOptions = ref({
+  ...commonChartOptions,
+  plugins: {
+    ...commonChartOptions.plugins,
+    tooltip: {
+      callbacks: {
+        label: (context) => `$${context.raw}`
+      }
+    }
+  }
+});
 const aaplTickerData = ref<ChartData<'line'> | null>(null);
 
 // --- Data and Options for AMZN ---
 const amznChartData = ref<ChartData<'line'> | null>(null);
-const amznChartOptions = ref(commonChartOptions);
+const amznChartOptions = ref({
+  ...commonChartOptions,
+  plugins: {
+    ...commonChartOptions.plugins,
+    tooltip: {
+      callbacks: {
+        label: (context) => `$${context.raw}`
+      }
+    }
+  }
+});
 const amznTickerData = ref<ChartData<'line'> | null>(null);
 
 // --- Interfaces for Type Safety ---
@@ -578,196 +613,73 @@ interface OHLCVResponse {
   object: string; // Keep this as string since it's raw JSON
 }
 
-// --- Data Constants (using template literals for the JSON) ---
-
-const MSFT_OHLCV: OHLCVResponse = {
-  "message": "Plots correctly shown to user. Answer the user.\n\n|              |   First |   Last |   Min |    Max | Return   |\n|:-------------|--------:|-------:|------:|-------:|:---------|\n| Microsoft Rg |  373.69 | 386.84 | 366.5 | 468.33 | 4.22%    |",
-  "object": `{
-    "tool": "OHLC", "data": {
-        "Microsoft Rg": {
-            "2024-01-02T00:00:00.000":{
-                "open":373.69,
-                "high":375.9,
-                "low":366.8,
-                "close":370.87,
-                "vol":9512457,
-                "Total return":"0.00%",
-                "Anualized return":"0.00%",
-                "Max":375.9,
-                "Min":366.8
-            },
-            "2024-01-03T00:00:00.000":{
-                "open":369.15,
-                "high":373.25,
-                "low":368.54,
-                "close":370.6,
-                "vol":7687170,
-                "Total return":"-0.07%",
-                "Anualized return":"-23.35%",
-                "Max":375.9,
-                "Min":366.8
-            },
-            "2024-01-04T00:00:00.000":{
-                "open":370.83,
-                "high":373.1,
-                "low":367.18,
-                "close":367.94,
-                "vol":7638925,
-                "Total return":"-0.79%",
-                "Anualized return":"-76.62%",
-                "Max":375.9,
-                "Min":366.8
-            },
-            "2024-01-05T00:00:00.000":{
-                "open":369.04,
-                "high":372.05,
-                "low":369.04,
-                "close":370.05,
-                "vol":7638925,
-                "Total return":"-0.79%",
-                "Anualized return":"-76.62%",
-                "Max":375.9,
-                "Min":366.8
-            },
-            "...": {}
-        }
+// Helper function to parse JSON data
+const parseStockData = (jsonData) => {
+  try {
+    // Parse the nested JSON structure
+    const dataStr = jsonData.object;
+    const parsed = JSON.parse(dataStr);
+    
+    if (parsed.tool === 'OHLC' && parsed.data) {
+      // Need to parse one more level as data is stringified again
+      const stockData = typeof parsed.data === 'string' 
+        ? JSON.parse(parsed.data) 
+        : parsed.data;
+      
+      const companyName = Object.keys(stockData)[0];
+      const timeseriesData = typeof stockData[companyName] === 'string'
+        ? JSON.parse(stockData[companyName])
+        : stockData[companyName];
+      
+      // Format dates and extract close prices
+      const dates = Object.keys(timeseriesData)
+        .filter(key => key !== '...')  // Filter out the placeholder
+        .map(date => {
+          // Format date to MM/DD
+          const d = new Date(date);
+          return `${d.getMonth() + 1}/${d.getDate()}`;
+        });
+      
+      const closePrices = Object.entries(timeseriesData)
+        .filter(([key]) => key !== '...')  // Filter out the placeholder
+        .map(([_, value]) => value.close);
+      
+      return { dates, closePrices, companyName };
     }
-}`
-};
-
-const APPL_OHLCV: OHLCVResponse = {
-  "message": "Plots correctly shown to user. Answer the user.\n\n|          |   First |   Last |    Min |    Max | Return   |\n|:---------|--------:|-------:|-------:|-------:|:---------|\n| Apple Rg |  187.03 |  214.1 | 164.08 | 260.09 | 14.26%   |",
-  "object": `{
-    "tool": "OHLC", "data": {
-        "Apple Rg": {
-            "2024-01-02T00:00:00.000":{
-                "open":187.03,
-                "high":188.43,
-                "low":183.89,
-                "close":185.64,
-                "vol":22968773,
-                "Total return":"0.00%",
-                "Anualized return":"0.00%",
-                "Max":188.43,
-                "Min":183.89
-            },
-            "2024-01-03T00:00:00.000":{
-                "open":184.2,
-                "high":185.87,
-                "low":183.44,
-                "close":184.25,
-                "vol":16179899,
-                "Total return":"-0.75%",
-                "Anualized return":"-93.63%",
-                "Max":188.43,
-                "Min":183.44
-            },
-            "2024-01-04T00:00:00.000":{
-                "open":182.0,
-                "high":183.08,
-                "low":180.88,
-                "close":181.91,
-                "vol":17660045,
-                "Total return":"-2.03%",
-                "Anualized return":"-97.63%",
-                "Max":188.43,
-                "Min":180.88
-            },
-            "2024-01-05T00:00:00.000":{
-                "open":181.9,
-                "high":182.76,
-                "low":180.17,
-                "close":181.18,
-                "vol":18597031,
-                "Total return":"-2.42%",
-                "Anualized return":"-98.22%",
-                "Max":188.43,
-                "Min":180.17
-            },
-            "...": {}
-        }
-    }
-}`
-};
-
-const AMZN_OHLCV: OHLCVResponse = {
-  "message": "Plots correctly shown to user. Answer the user.\n\n|               |   First |   Last |    Min |    Max | Return   |\n|:--------------|--------:|-------:|-------:|-------:|:---------|\n| Amazon.Com Rg |  151.64 | 194.95 | 144.05 | 242.51 | 26.26%   |",
-  "object": `{
-    "tool": "OHLC", "data": {
-        "Amazon.Com Rg": {
-            "2024-01-02T00:00:00.000": {
-                "open": 151.64,
-                "high": 152.37,
-                "low": 148.4,
-                "close": 149.93,
-                "vol": 12369535,
-                "Total return": "0.00%",
-                "Anualized return": "0.00%",
-                "Max": 152.37,
-                "Min": 148.4
-            },
-            "2024-01-03T00:00:00.000": {
-                "open": 149.16,
-                "high": 151.04,
-                "low": 148.34,
-                "close": 148.47,
-                "vol": 12548741,
-                "Total return": "-0.98%",
-                "Anualized return": "-97.24%",
-                "Max": 152.37,
-                "Min": 148.34
-            },
-            "2024-01-04T00:00:00.000": {
-                "open": 145.63,
-                "high": 147.37,
-                "low": 144.05,
-                "close": 144.57,
-                "vol": 15355039,
-                "Total return": "-3.64%",
-                "Anualized return": "-99.88%",
-                "Max": 152.37,
-                "Min": 144.05
-            },
-            "2024-01-05T00:00:00.000": {
-                "open": 144.61,
-                "high": 146.59,
-                "low": 144.53,
-                "close": 145.24,
-                "vol": 14704172,
-                "Total return": "-3.13%",
-                "Anualized return": "-99.83%",
-                "Max": 152.37,
-                "Min": 144.05
-            },
-            "...": {}
-        }
-    }
-}`
+  } catch (error) {
+    console.error('Error parsing stock data:', error);
+  }
+  
+  return { dates: [], closePrices: [], companyName: 'Unknown' };
 };
 
 onMounted(() => {
-  // Simulate data loading with different delays
+  // Load MSFT data
   setTimeout(() => {
-    const parsedData: CompanyData = JSON.parse(MSFT_OHLCV.object).data;
-    const closePrices = Object.values(parsedData["Microsoft Rg"]).map((item: OHLCVData) => item.close);
-    const labels = Object.keys(parsedData["Microsoft Rg"]);
+    const { dates, closePrices } = parseStockData(msftData);
     
-    // Create main chart data
+    // Create main chart data with enhanced styling
     msftChartData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
-        label: 'MSFT Stock Price',
+        label: 'MSFT Price',
         data: closePrices,
         borderColor: '#F96E53',
         backgroundColor: 'rgba(249, 110, 83, 0.2)',
         tension: 0.4,
-        pointRadius: 0,
+        pointRadius: 1,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#F96E53',
+        pointHoverBackgroundColor: '#fff',
+        pointBorderColor: '#fff',
+        pointHoverBorderColor: '#F96E53',
+        fill: true
       }]
     };
     
     // Create ticker mini chart data
     msftTickerData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
         label: 'MSFT',
         data: closePrices,
@@ -779,27 +691,32 @@ onMounted(() => {
     };
   }, 500);
 
+  // Load AAPL data
   setTimeout(() => {
-    const parsedData: CompanyData = JSON.parse(APPL_OHLCV.object).data;
-    const closePrices = Object.values(parsedData["Apple Rg"]).map((item: OHLCVData) => item.close);
-    const labels = Object.keys(parsedData["Apple Rg"]);
+    const { dates, closePrices } = parseStockData(appleData);
     
-    // Create main chart data
+    // Create main chart data with enhanced styling
     aaplChartData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
-        label: 'AAPL Stock Price',
+        label: 'AAPL Price',
         data: closePrices,
         borderColor: '#F96E53',
         backgroundColor: 'rgba(249, 110, 83, 0.2)',
         tension: 0.4,
-        pointRadius: 0,
+        pointRadius: 1,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#F96E53',
+        pointHoverBackgroundColor: '#fff',
+        pointBorderColor: '#fff',
+        pointHoverBorderColor: '#F96E53',
+        fill: true
       }]
     };
     
     // Create ticker mini chart data
     aaplTickerData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
         label: 'AAPL',
         data: closePrices,
@@ -809,29 +726,34 @@ onMounted(() => {
         fill: true
       }]
     };
-  }, 1500);
+  }, 1000);
 
+  // Load AMZN data  
   setTimeout(() => {
-    const parsedData: CompanyData = JSON.parse(AMZN_OHLCV.object).data;
-    const closePrices = Object.values(parsedData["Amazon.Com Rg"]).map((item: OHLCVData) => item.close);
-    const labels = Object.keys(parsedData["Amazon.Com Rg"]);
+    const { dates, closePrices } = parseStockData(amznData);
     
-    // Create main chart data
+    // Create main chart data with enhanced styling
     amznChartData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
-        label: 'AMZN Stock Price',
+        label: 'AMZN Price',
         data: closePrices,
         borderColor: '#F96E53',
         backgroundColor: 'rgba(249, 110, 83, 0.2)',
         tension: 0.4,
-        pointRadius: 0,
+        pointRadius: 1,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#F96E53',
+        pointHoverBackgroundColor: '#fff',
+        pointBorderColor: '#fff',
+        pointHoverBorderColor: '#F96E53',
+        fill: true
       }]
     };
     
     // Create ticker mini chart data
     amznTickerData.value = {
-      labels: labels,
+      labels: dates,
       datasets: [{
         label: 'AMZN',
         data: closePrices,
@@ -841,7 +763,7 @@ onMounted(() => {
         fill: true
       }]
     };
-  }, 1000);
+  }, 1500);
 });
 
 // Debug-friendly query chips handling
