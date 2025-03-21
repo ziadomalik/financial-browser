@@ -848,14 +848,37 @@ onMounted(() => {
 const updateQueryChips = (chips: Array<{text: string, type: string}>) => {
   console.log('INDEX: Received query chips:', chips)
   
-  // Force immediate update and use setTimeout to ensure DOM updates
-  queryChips.value = [];
-  
-  // Add each chip immediately instead of with animation timing
-  setTimeout(() => {
-    queryChips.value = [...chips];
+  // Only replace chips if we have new ones, don't clear existing ones
+  if (chips && chips.length > 0) {
+    // Merge new chips with existing ones, avoiding duplicates
+    // Convert to a Map to handle duplicates by text
+    const currentChipsMap = new Map(queryChips.value.map(chip => [chip.text, chip]));
+    
+    // Add new chips, replacing any with the same text
+    chips.forEach(chip => {
+      currentChipsMap.set(chip.text, chip);
+    });
+    
+    // Convert back to array, limiting to max 5 chips (most recent first)
+    const mergedChips = Array.from(currentChipsMap.values());
+    
+    // Keep only the most recent 5 chips
+    queryChips.value = mergedChips.slice(-5);
+    
     console.log('Chips updated:', queryChips.value);
-  }, 100);
+    
+    // Set a timeout to eventually remove chips after a long period (optional)
+    // This can be removed if you want chips to stay forever until replaced
+    /*
+    setTimeout(() => {
+      // Remove chips that are older than 5 minutes
+      const now = Date.now();
+      queryChips.value = queryChips.value.filter(chip => 
+        chip.timestamp && now - chip.timestamp < 300000
+      );
+    }, 300000); // 5 minutes
+    */
+  }
 }
 
 // Handle click on a query chip

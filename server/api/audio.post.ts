@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
             const transcriptionResult = await transcribeAudioChunk(filePath)
             
             // Generate query chips based on transcription
-            const queryChips = generateQueryChips(transcriptionResult)
+            const queryChips = await generateQueryChips(transcriptionResult)
             
             return {
                 success: true,
@@ -127,71 +127,156 @@ async function transcribeAudioChunk(audioFilePath: string): Promise<string> {
     }
 }
 
-// Add a simple version of the generate function to guarantee at least some chips
-function generateQueryChips(transcription: string): Array<{text: string, type: string}> {
+// Advanced query chip generation for financial consultants
+async function generateQueryChips(transcription: string): Promise<Array<{text: string, type: string}>> {
     // If the transcription is empty or an error, return empty array
     if (!transcription || transcription.startsWith('Error')) {
         return [];
     }
     
-    console.log('Generating query chips from:', transcription)
+    console.log('Generating query chips from:', transcription);
     
-    // Always include at least one default chip for testing
-    const chips = [{
-        text: 'Finance Research',
-        type: 'general'
-    }];
-    
-    // Extract key terms from transcription
-    const keywords = [
-        { term: 'stock', type: 'general' },
-        { term: 'market', type: 'general' },
-        { term: 'tech', type: 'tech' },
-        { term: 'volatile', type: 'volatile' },
-        { term: 'crash', type: 'crash' },
-        { term: 'microsoft', type: 'msft' },
-        { term: 'apple', type: 'aapl' },
-        { term: 'amazon', type: 'amzn' },
-        { term: 'nvidia', type: 'nvidia' },
-        { term: 'nasdaq', type: 'nasdaq' },
-        { term: 'federal', type: 'administration' }
-    ];
-    
-    // Find any keywords in the transcription
+    try {
+        // Use OpenAI to generate context-aware financial query chips
+        const openai = new OpenAI();
+        
+        const response = await openai.chat.completions.create({
+            model: "gpt-4-turbo",
+            messages: [
+                {
+                    role: "system",
+                    content: `You are an expert financial research assistant. Generate 3-5 useful, specific search queries 
+                    that a financial consultant would find valuable when researching topics to discuss with clients.
+                    
+                    Each query should be:
+                    1. Specific and actionable (e.g., "MSFT Q2 earnings forecast" instead of just "Microsoft")
+                    2. Relevant to financial advisors and wealth management
+                    3. Focused on topics like stock performance, market trends, investment strategies, or risk analysis
+                    
+                    For each query, also assign one of these categories:
+                    - stock: For specific equity analysis
+                    - macro: For macroeconomic trends
+                    - sector: For industry sector analysis
+                    - risk: For risk assessment queries
+                    - strategy: For investment strategy queries
+                    
+                    Return JSON format only: 
+                    [{"text": "Query text", "type": "category"}]`
+                },
+                {
+                    role: "user",
+                    content: `Generate financial research queries based on this client conversation: "${transcription}"`
+                }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+            max_tokens: 500
+        });
+        
+        const result = JSON.parse(response.choices[0].message.content || "{}");
+        
+        if (Array.isArray(result.queries) && result.queries.length > 0) {
+            console.log('AI-generated chips:', result.queries);
+            return result.queries.slice(0, 5);
+        }
+        
+        // Fallback to enhanced rule-based generation if AI fails
+        return generateFallbackChips(transcription);
+    } catch (error) {
+        console.error('Error generating AI query chips:', error);
+        // Fallback to enhanced rule-based generation
+        return generateFallbackChips(transcription);
+    }
+}
+
+// Enhanced fallback query chip generation
+function generateFallbackChips(transcription: string): Array<{text: string, type: string}> {
+    const chips = [];
     const text = transcription.toLowerCase();
-    keywords.forEach(({ term, type }) => {
-        if (text.includes(term)) {
-            // Find the word and a bit of context
-            const words = text.split(' ');
-            const index = words.findIndex(w => w.includes(term));
-            if (index >= 0) {
-                const start = Math.max(0, index - 1);
-                const end = Math.min(words.length, index + 2);
-                const phrase = words.slice(start, end).join(' ');
-                
-                // Capitalize first letter
-                const formattedPhrase = phrase.charAt(0).toUpperCase() + phrase.slice(1);
-                
-                chips.push({
-                    text: formattedPhrase,
-                    type
-                });
-            }
+    
+    // Financial-specific patterns
+    const stockPattern = /\b([A-Z]{1,5})\b\s?(stock|share|price|earnings|forecast|outlook|performance|analysis)/gi;
+    const stockMatches = [...transcription.matchAll(stockPattern)];
+    
+    stockMatches.forEach(match => {
+        if (match[1]) {
+            chips.push({
+                text: `${match[1]} ${match[2] || 'analysis'}`,
+                type: 'stock'
+            });
         }
     });
     
-    // Add stock symbols (uppercase 1-5 letter words)
-    const symbolRegex = /\b[A-Z]{1,5}\b/g;
-    const symbols = transcription.match(symbolRegex) || [];
-    symbols.forEach(symbol => {
-        chips.push({
-            text: symbol,
-            type: 'general'
-        });
+    // Sector-specific analysis
+    const sectors = [
+        { term: 'tech', type: 'sector', output: 'Technology sector analysis' },
+        { term: 'healthcare', type: 'sector', output: 'Healthcare sector outlook' },
+        { term: 'finance', type: 'sector', output: 'Financial sector performance' },
+        { term: 'energy', type: 'sector', output: 'Energy market trends' },
+        { term: 'consumer', type: 'sector', output: 'Consumer sector forecast' }
+    ];
+    
+    sectors.forEach(({ term, type, output }) => {
+        if (text.includes(term)) {
+            chips.push({ text: output, type });
+        }
     });
     
-    // Limit to 5 chips
-    console.log('Generated chips:', chips.slice(0, 5))
+    // Economic indicators
+    const indicators = [
+        { term: 'inflation', type: 'macro', output: 'Inflation impact on portfolio' },
+        { term: 'interest rate', type: 'macro', output: 'Interest rate outlook' },
+        { term: 'recession', type: 'risk', output: 'Recession probability analysis' },
+        { term: 'gdp', type: 'macro', output: 'GDP growth forecast' },
+        { term: 'fed', type: 'macro', output: 'Federal Reserve policy impact' }
+    ];
+    
+    indicators.forEach(({ term, type, output }) => {
+        if (text.includes(term)) {
+            chips.push({ text: output, type });
+        }
+    });
+    
+    // Investment strategies
+    const strategies = [
+        { term: 'dividend', type: 'strategy', output: 'High-yield dividend stocks' },
+        { term: 'growth', type: 'strategy', output: 'Growth investment strategy' },
+        { term: 'value', type: 'strategy', output: 'Value stock opportunities' },
+        { term: 'etf', type: 'strategy', output: 'ETF investment options' },
+        { term: 'portfolio', type: 'strategy', output: 'Portfolio diversification strategy' }
+    ];
+    
+    strategies.forEach(({ term, type, output }) => {
+        if (text.includes(term)) {
+            chips.push({ text: output, type });
+        }
+    });
+    
+    // Add specific company analysis for well-known stocks
+    const companies = [
+        { term: 'microsoft', type: 'stock', output: 'MSFT growth drivers' },
+        { term: 'apple', type: 'stock', output: 'AAPL revenue forecast' },
+        { term: 'amazon', type: 'stock', output: 'AMZN market position' },
+        { term: 'nvidia', type: 'stock', output: 'NVDA AI sector impact' },
+        { term: 'google', type: 'stock', output: 'GOOGL advertising trends' }
+    ];
+    
+    companies.forEach(({ term, type, output }) => {
+        if (text.includes(term)) {
+            chips.push({ text: output, type });
+        }
+    });
+    
+    // Add at least one default chip if none were generated
+    if (chips.length === 0) {
+        chips.push({
+            text: 'Market performance overview',
+            type: 'macro'
+        });
+    }
+    
+    // Limit to 5 chips with most relevant first
+    console.log('Generated fallback chips:', chips.slice(0, 5));
     return chips.slice(0, 5);
 }
 
