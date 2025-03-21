@@ -3,7 +3,8 @@ import { generateObject, tool } from 'ai'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import FirecrawlApp from '@mendable/firecrawl-js'
-import { visualizationQueue } from '../socket/queryPlanner'
+import { visualizationQueue, connection } from '../socket/queryPlanner'
+import { defineEventHandler, getQuery } from 'h3'
 
 const createCrawlQueriesPrompt = `
   The user is querying a browser that can crawl the web for financial information and news.
@@ -251,6 +252,13 @@ export async function processFinancialQuery(query: string, context?: {
     console.log('[ProcessFinancialQuery] Query: ', query)
     console.log('[ProcessFinancialQuery] Context: ', context)
 
+    // Determine if this is a search query from the search bar
+    const isSearchQuery = context?.currentAction?.includes('User searched for:') || false;
+
+    if (isSearchQuery) {
+        console.log('[ProcessFinancialQuery] Processing as search query with immediate results');
+    }
+
     try {
         // Prepare system prompt based on context (if provided)
         let systemPrompt = `
@@ -276,9 +284,34 @@ export async function processFinancialQuery(query: string, context?: {
         // Extract user ID from context if available
         const userId = context?.currentAction ? context.currentAction.split(':')[0] : 'anonymous';
 
-        // Create a function to process steps incrementally as they complete
-        let processedStepsCount = 0;
+        // Create initial "loading" notification
+        if (isSearchQuery) {
+            try {
+                // Simple loading notification
+                const loadingData = {
+                    userId,
+                    visualizationData: {
+                        userId,
+                        query,
+                        text: `Processing search for "${query}"`,
+                        toolResults: [],
+                        adaptiveCards: [],
+                        timestamp: Date.now(),
+                        isPartialVisualization: true,
+                        isSearchQuery: true
+                    },
+                    timestamp: Date.now()
+                };
 
+                // Publish loading state - no complex Redis storage
+                await connection.publish('partial-visualization-update', JSON.stringify(loadingData));
+                console.log('[ProcessFinancialQuery] Notified clients of search start');
+            } catch (err) {
+                console.error('[ProcessFinancialQuery] Error publishing loading state:', err);
+            }
+        }
+
+        // Generate text with tool calls
         const { text, steps } = await generateText({
             model: openai('gpt-4o-mini'),
             tools: {
@@ -291,64 +324,105 @@ export async function processFinancialQuery(query: string, context?: {
             toolChoice: 'required',
             system: systemPrompt,
             prompt: query as string,
-            maxSteps: 3,
+            maxSteps: 3
         });
 
         // Process each step immediately for visualization
         for (const step of steps) {
             if (step.toolResults && step.toolResults.length > 0) {
-                processedStepsCount++;
+                try {
+                    // Publish this tool result immediately
+                    const toolResult = step.toolResults[0];
+                    const toolName = toolResult.toolName || 'unknown';
 
-                // Prepare a partial result for this individual step
-                const partialResult = {
-                    userId,
-                    query,
-                    result: {
-                        text: '', // We don't have content at the step level, will be populated in final result
-                        toolResults: [step.toolResults[0]] // Just include this step's tool result
-                    },
-                    timestamp: Date.now(),
-                    isPartial: true,
-                    stepNumber: processedStepsCount
-                };
+                    // Simple data object with minimal processing
+                    const resultData = {
+                        userId,
+                        visualizationData: {
+                            userId,
+                            query,
+                            text: `Results from ${toolName}`,
+                            toolResults: [toolResult],
+                            adaptiveCards: [],
+                            timestamp: Date.now(),
+                            isPartialVisualization: true,
+                            toolName
+                        },
+                        timestamp: Date.now()
+                    };
 
-                // Send to visualization queue for immediate UI updates
-                await visualizationQueue.add('partial-result', partialResult, {
-                    attempts: 3,
-                    backoff: {
-                        type: 'exponential',
-                        delay: 1000,
-                    },
-                    removeOnComplete: {
-                        age: 1800, // 30 minutes in seconds - partial results can expire faster
-                        count: 500  // Keep at most 500 partial results
-                    },
-                    removeOnFail: {
-                        age: 3600, // 1 hour in seconds
-                        count: 50  // Keep fewer failed partial results
-                    }
-                });
-
-                console.log(`[ProcessFinancialQuery] Sent partial tool result (${processedStepsCount}/${steps.length}) to visualization queue`);
+                    // Publish this immediately - no Redis or job tracking
+                    await connection.publish('partial-visualization-update', JSON.stringify(resultData));
+                    console.log(`[ProcessFinancialQuery] Published ${toolName} result`);
+                } catch (err) {
+                    console.error('[ProcessFinancialQuery] Error publishing tool result:', err);
+                }
             }
         }
 
         // Extract all tool results for the final response
-        const toolResults = steps.flatMap(step => step.toolResults || [])
+        const toolResults = steps.flatMap(step => step.toolResults || []);
 
-        // Return the complete result
-        return {
-            text,
-            toolResults
+        // Immediately publish the complete result
+        try {
+            // Complete notification - with "done" flag
+            const completeData = {
+                userId,
+                visualizationData: {
+                    userId,
+                    query,
+                    text,
+                    toolResults,
+                    adaptiveCards: [],
+                    timestamp: Date.now(),
+                    isComplete: true
+                },
+                timestamp: Date.now(),
+                query,
+                searchComplete: true // Flag to reset loading states
+            };
+
+            // Publish complete result with "reset loading" flag
+            await connection.publish('visualization-complete', JSON.stringify(completeData));
+            console.log('[ProcessFinancialQuery] Published completion notification');
+
+            // Also send a visualization update to ensure UI refreshes
+            await connection.publish('visualization-updates', JSON.stringify({
+                userId,
+                timestamp: Date.now(),
+                searchComplete: true
+            }));
+
+        } catch (err) {
+            console.error('[ProcessFinancialQuery] Error publishing complete result:', err);
         }
 
+        // Return the complete result data
+        return {
+            text,
+            toolResults,
+            searchComplete: true
+        }
     } catch (error) {
         console.error('[ProcessFinancialQuery] Error generating response:', error)
+
+        // Even on error, publish a completion to reset the UI state
+        try {
+            await connection.publish('visualization-complete', JSON.stringify({
+                userId: context?.currentAction ? context.currentAction.split(':')[0] : 'anonymous',
+                error: true,
+                timestamp: Date.now(),
+                searchComplete: true
+            }));
+        } catch (err) {
+            console.error('[ProcessFinancialQuery] Error publishing error state:', err);
+        }
 
         return {
             error: true,
             message: 'Failed to process your request',
-            details: error instanceof Error ? error.message : String(error)
+            details: error instanceof Error ? error.message : String(error),
+            searchComplete: true
         }
     }
 }

@@ -26,11 +26,15 @@ const UI_BASE_URL = process.env.UI_BASE_URL || 'http://localhost:3000';
 // QUEUE DEFINITIONS FOR THREE-STAGE PIPELINE
 // ==========================================
 
+// Queue configuration
+const DEFAULT_JOB_TIMEOUT = 60000; // 1 minute timeout for jobs
+const MAX_CONCURRENT_JOBS = 5; // Maximum number of concurrent jobs per queue
+
 // 1. User interaction to query generation
 const interactionQueue = new Queue('interaction-query', { connection });
 
 // 2. Query execution with tool calling
-const queryExecutionQueue = new Queue('query-execution', { connection });
+export const queryExecutionQueue = new Queue('query-execution', { connection });
 
 // 3. Results visualization 
 export const visualizationQueue = new Queue('visualization', { connection });
@@ -472,84 +476,98 @@ const visualizationWorker = new Worker('visualization', async (job: Job<QueryExe
     const isPartialResult = resultData.isPartial === true;
 
     try {
-        // Call the UI adapter API to generate adaptive cards
-        // Use the constant UI_BASE_URL for server-to-server communication
-        const apiUrl = new URL('/api/ui', UI_BASE_URL).toString();
-
-        console.log(`[Visualization] Making API request to ${apiUrl} (using base URL: ${UI_BASE_URL})`);
-
-        // Log whether this is a partial or complete result
-        if (isPartialResult) {
-            console.log(`[Visualization] Processing partial result (step ${resultData.stepNumber})`);
-        } else {
-            console.log(`[Visualization] Processing complete result`);
-        }
-
-        // Prepare the payload that matches what the UI API expects
-        const payload = {
-            userQuery: resultData.query,
-            toolCallJsonResult: resultData.result.toolResults,
-            isPartial: isPartialResult
-        };
-
-        // Use ofetch to make the HTTP request with the absolute URL
-        const adaptiveCards = await $fetch(apiUrl, {
-            method: 'POST',
-            body: payload,
-            retry: 2,
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
+        // Set a timeout to ensure this job doesn't run too long
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new Error(`Visualization job ${job.id} timed out after ${DEFAULT_JOB_TIMEOUT / 1000} seconds`));
+            }, DEFAULT_JOB_TIMEOUT);
         });
 
-        // Generate a unique key for partial results if needed
-        const visualizationKey = isPartialResult
-            ? `user:visualization:partial:${resultData.userId}:${resultData.stepNumber}`
-            : `user:visualization:${resultData.userId}`;
+        // The actual visualization process
+        const visualizationPromise = (async () => {
+            // Call the UI adapter API to generate adaptive cards
+            // Use the constant UI_BASE_URL for server-to-server communication
+            const apiUrl = new URL('/api/ui', UI_BASE_URL).toString();
 
-        const visualizationData = {
-            userId: resultData.userId,
-            query: resultData.query,
-            text: resultData.result.text,
-            toolResults: resultData.result.toolResults,
-            adaptiveCards: adaptiveCards,
-            timestamp: Date.now(),
-            isPartial: isPartialResult,
-            stepNumber: resultData.stepNumber || 0
-        };
+            console.log(`[Visualization] Making API request to ${apiUrl} (using base URL: ${UI_BASE_URL})`);
 
-        // Store in Redis - for partial results, we'll use a different pattern and shorter expiry
-        if (isPartialResult) {
-            // Store partial results with a shorter expiry time
-            await connection.set(visualizationKey, JSON.stringify(visualizationData));
-            await connection.expire(visualizationKey, 300); // 5 minute expiry for partial results
+            // Log whether this is a partial or complete result
+            if (isPartialResult) {
+                console.log(`[Visualization] Processing partial result (step ${resultData.stepNumber})`);
+            } else {
+                console.log(`[Visualization] Processing complete result`);
+            }
 
-            // Publish partial result for immediate UI update
-            await connection.publish('partial-visualization-update', JSON.stringify({
+            // Prepare the payload that matches what the UI API expects
+            const payload = {
+                userQuery: resultData.query,
+                toolCallJsonResult: resultData.result.toolResults,
+                isPartial: isPartialResult
+            };
+
+            // Use ofetch to make the HTTP request with the absolute URL
+            const adaptiveCards = await $fetch(apiUrl, {
+                method: 'POST',
+                body: payload,
+                retry: 2,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: DEFAULT_JOB_TIMEOUT - 5000 // Slightly shorter than the job timeout
+            });
+
+            // Generate a unique key for partial results if needed
+            const visualizationKey = isPartialResult
+                ? `user:visualization:partial:${resultData.userId}:${resultData.stepNumber}`
+                : `user:visualization:${resultData.userId}`;
+
+            const visualizationData = {
                 userId: resultData.userId,
-                visualizationData,
-                timestamp: Date.now()
-            }));
-        } else {
-            // For complete results, use the standard approach
-            await connection.lpush(visualizationKey, JSON.stringify(visualizationData));
-            await connection.ltrim(visualizationKey, 0, 19); // Keep only latest 20
-            await connection.expire(visualizationKey, STORAGE_EXPIRY);
+                query: resultData.query,
+                text: resultData.result.text,
+                toolResults: resultData.result.toolResults,
+                adaptiveCards: adaptiveCards,
+                timestamp: Date.now(),
+                isPartial: isPartialResult,
+                stepNumber: resultData.stepNumber || 0
+            };
 
-            // Publish an event that can be listened to by the frontend
-            await connection.publish('visualization-updates', JSON.stringify({
-                userId: resultData.userId,
-                visualizationData,
-                timestamp: Date.now()
-            }));
-        }
+            // Store in Redis - for partial results, we'll use a different pattern and shorter expiry
+            if (isPartialResult) {
+                // Store partial results with a shorter expiry time
+                await connection.set(visualizationKey, JSON.stringify(visualizationData));
+                await connection.expire(visualizationKey, 300); // 5 minute expiry for partial results
 
-        return {
-            success: true,
-            visualizationId: visualizationKey,
-            isPartial: isPartialResult
-        };
+                // Publish partial result for immediate UI update
+                await connection.publish('partial-visualization-update', JSON.stringify({
+                    userId: resultData.userId,
+                    visualizationData,
+                    timestamp: Date.now()
+                }));
+            } else {
+                // For complete results, use the standard approach
+                await connection.lpush(visualizationKey, JSON.stringify(visualizationData));
+                await connection.ltrim(visualizationKey, 0, 19); // Keep only latest 20
+                await connection.expire(visualizationKey, STORAGE_EXPIRY);
+
+                // Publish an event that can be listened to by the frontend
+                await connection.publish('visualization-updates', JSON.stringify({
+                    userId: resultData.userId,
+                    visualizationData,
+                    timestamp: Date.now()
+                }));
+            }
+
+            return {
+                success: true,
+                visualizationId: visualizationKey,
+                isPartial: isPartialResult
+            };
+        })();
+
+        // Race between the timeout and the actual visualization process
+        return await Promise.race([timeoutPromise, visualizationPromise]);
     } catch (error) {
         console.error('[Visualization Worker] Error generating visualization:', error);
 
@@ -568,7 +586,14 @@ const visualizationWorker = new Worker('visualization', async (job: Job<QueryExe
 
         throw new Error(`Visualization failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-}, { connection });
+}, {
+    connection,
+    concurrency: MAX_CONCURRENT_JOBS, // Limit concurrent jobs
+    limiter: {
+        max: 10, // Maximum 10 jobs per time period
+        duration: 1000 // per second
+    }
+});
 
 // ==========================================
 // EVENT LISTENERS FOR MONITORING

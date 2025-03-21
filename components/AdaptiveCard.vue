@@ -1,7 +1,18 @@
 <template>
   <div class="bento-card rounded-3xl border border-neutral-200 text-card-foreground overflow-hidden max-w-md shadow-sm">
-    <div v-if="closable" class="flex items-center justify-end p-3">
+    <div v-if="closable || expandable" class="flex items-center justify-between p-3">
       <button 
+        v-if="expandable"
+        @click="emit('expand')" 
+        class="rounded-full px-3 py-1 opacity-80 transition-all hover:opacity-100 focus:outline-none flex items-center justify-center bg-blue-100 hover:bg-blue-200 text-xs text-blue-700"
+        aria-label="Expand insights"
+      >
+        <span class="mr-1">Expand</span>
+        <Icon name="i-ph-arrow-circle-down-light" class="h-3 w-3" />
+      </button>
+      <div class="flex-grow"></div>
+      <button 
+        v-if="closable"
         @click="emit('close')" 
         class="rounded-full opacity-80 transition-all hover:opacity-100 focus:outline-none h-6 w-6 flex items-center justify-center bg-white/20 hover:bg-white/30"
         aria-label="Close"
@@ -22,10 +33,11 @@ const cardContainer = ref<HTMLDivElement | null>(null)
 const props = defineProps<{ 
     card: Record<string, any>, 
     interactive?: boolean,
-    closable?: boolean
+    closable?: boolean,
+    expandable?: boolean
 }>()
 
-const emit = defineEmits(['executeAction', 'close'])
+const emit = defineEmits(['executeAction', 'close', 'expand'])
 
 onMounted(() => {
     try {
