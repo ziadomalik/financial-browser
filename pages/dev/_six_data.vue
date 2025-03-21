@@ -39,8 +39,8 @@ const handleClick = async () => {
     console.log('[Six] Calling UI API: ', query.value)
 
     const response = await submit({
-        query: query.value,
-        rawData: { sus: query.value } 
+        userQuery: query.value,
+        toolCallJsonResult: { sus: query.value } 
     })
 
     console.log('[Six] Done Calling: ', response)

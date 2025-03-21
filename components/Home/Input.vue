@@ -17,7 +17,7 @@
         @click="handleSearch" 
         class="absolute right-0 inset-y-0 flex items-center justify-center px-4"
         :disabled="isLoading || !searchQuery.trim()"
-    >
+        >
         <span 
             class="px-3 py-1 rounded-full bg-[#DE3819] text-white text-sm font-medium" 
             :class="{'opacity-70': isLoading || !searchQuery.trim()}"
@@ -25,8 +25,12 @@
             Search
         </span>
     </button>
-
   </div>
+
+  <div v-for="card in UiCards">
+        <AdaptiveCard :card="card" :closable="true" />
+  </div>
+
 </template>
 
 <script setup lang="ts">
@@ -72,6 +76,9 @@ const handleSearch = async () => {
     } finally {}
 
     try {
+        console.log('userQuery: ', searchQuery.value)
+        console.log('toolCallJsonResult: ', result.value)
+        
         await submit({
             userQuery: searchQuery.value,
             toolCallJsonResult: result.value

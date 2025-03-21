@@ -61,7 +61,7 @@ export default defineEventHandler(async (event) => {
         })
 
         return response.toTextStreamResponse()
-        
+
     } catch (error) {
         console.error('Error in UI API:', error);
         return {

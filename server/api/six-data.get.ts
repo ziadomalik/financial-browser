@@ -22,27 +22,27 @@ const createCrawlQueriesPrompt = `
 `
 
 const FirecrawlQuerySchema = z.object({
-  prompt: z.string().describe('The prompt for the bot to crawl the sites'),
-  relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
+    prompt: z.string().describe('The prompt for the bot to crawl the sites'),
+    relevantSites: z.array(z.string()).describe('The sites the bot will crawl'),
 })
 
 const createCrawlQueries = async (query: string) => {
-  const { object } = await generateObject({
-    model: openai('gpt-4-turbo'),
-    schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
-    prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
-  });
+    const { object } = await generateObject({
+        model: openai('gpt-4-turbo'),
+        schema: z.object({ queries: z.array(FirecrawlQuerySchema).describe('10 queries to crawl the web') }),
+        prompt: createCrawlQueriesPrompt + '\n Here is the user query: ' + query,
+    });
 
-  console.log(object)
+    console.log(object)
 
-  return object
+    return object
 }
 
 export const filterCompaniesByCriteria = tool({
     description: `Get a list of companies filtered by certain criteria.`,
     parameters: z.object({
         query: z.array(z.object({
-            criteria: z.string().describe('The criteria to filter the companies by'), 
+            criteria: z.string().describe('The criteria to filter the companies by'),
             value: z.string().describe('The value of the criteria')
         })).describe(`
         Search with criteria. Query is a string with a dict schema like: '{"criteria": "logical value"}'.
@@ -66,7 +66,7 @@ export const filterCompaniesByCriteria = tool({
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: {}, 
+            body: {},
             timeout: 30000,
         })
 
@@ -85,7 +85,7 @@ export const getCompanyStockSummary = tool({
         console.log(`(getCompanyStockSummary) Making Request`)
 
         const { apiBaseUrl } = useRuntimeConfig()
-        
+
         const response = await $fetch(`${apiBaseUrl}/summary`, {
             method: 'POST',
             query: { query },
@@ -93,9 +93,9 @@ export const getCompanyStockSummary = tool({
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            body: {}, 
+            body: {},
             timeout: 30000,
-        }) 
+        })
 
         console.log(`(getCompanyStockSummary) Done`)
 
@@ -122,17 +122,17 @@ export const getCompanyData = tool({
         // Convert the query array into a JSON string format
         // Format: {"company1": "information to retrieve|yyyyQq"; "company2": "information to retrieve|yyyy"}
         const queryObj: Record<string, string> = {}
-        
+
         for (const item of query) {
             const yearStr = item.year.toString()
             const infoWithYear = `${item.informationToRetrieve.join(', ')}|${yearStr}`
             queryObj[item.companyName] = infoWithYear
         }
-        
+
         const queryString = encodeURIComponent(JSON.stringify(queryObj).replace(/,/g, ';'))
-        
+
         console.log(`(getCompanyData) Query String: ${queryString}`)
-        
+
 
         const response = await $fetch(`${apiBaseUrl}/companydatasearch?query=${queryString}`, {
             method: 'POST',
@@ -143,9 +143,9 @@ export const getCompanyData = tool({
             body: {},
             timeout: 32000,
         })
-        
+
         console.log(`(getCompanyData) Done`)
-        
+
         return response
     }
 })
@@ -174,7 +174,7 @@ export const getHistoricalStockPrice = tool({
                 'Content-type': 'application/json',
             },
             body: {},
-            timeout: 15000,
+            timeout: 30000,
         })
 
         console.log(`(getHistoricalStockPrice) Done`)
@@ -202,26 +202,26 @@ export const getCurrentNews = tool({
         try {
             // Get crawl queries
             const { queries } = await createCrawlQueries(query)
-            
+
             // Process the first query for immediate results
             if (queries.length > 0) {
                 const q = queries[0]
-                
+
                 // Extract data using Firecrawl with the Zod schema
                 const result = await firecrawl.extract(
-                    q.relevantSites, 
-                    { 
+                    q.relevantSites,
+                    {
                         prompt: q.prompt,
-                        schema: z.object({ 
-                            findings: z.array(z.object({ 
-                                title: z.string(), 
-                                teaser: z.string().describe('Extremely short, couple word teaser'), 
-                                details: z.string().describe('A longer description of the finding') 
-                            })) 
+                        schema: z.object({
+                            findings: z.array(z.object({
+                                title: z.string(),
+                                teaser: z.string().describe('Extremely short, couple word teaser'),
+                                details: z.string().describe('A longer description of the finding')
+                            }))
                         })
                     }
                 )
-                
+
                 console.log(`(getCurrentNews) Done`)
                 return result
             } else {
@@ -230,15 +230,15 @@ export const getCurrentNews = tool({
             }
         } catch (error) {
             console.error(`(getCurrentNews) Error:`, error)
-            return { 
-                findings: [{ 
-                    title: "Error retrieving news", 
-                    teaser: "Error occurred", 
-                    details: `Failed to retrieve news: ${error instanceof Error ? error.message : String(error)}` 
-                }] 
+            return {
+                findings: [{
+                    title: "Error retrieving news",
+                    teaser: "Error occurred",
+                    details: `Failed to retrieve news: ${error instanceof Error ? error.message : String(error)}`
+                }]
             }
         }
-        
+
     }
 })
 
@@ -290,7 +290,7 @@ export async function processFinancialQuery(query: string, context?: {
 
         // Extract tool results
         const toolResults = steps.flatMap(step => step.toolResults || [])
-        
+
         return {
             text,
             toolResults,
