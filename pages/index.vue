@@ -7,7 +7,7 @@
   -->
   <div class="dashboard-container w-full h-full">
     <!-- Header section -->
-    <div class="client-profile w-full h-[130px] bg-[#F6F6F6] rounded-[20px]">
+    <div class="client-profile w-full h-[100x] bg-[#F6F6F6] rounded-[20px]">
       <div class="profile-info">
         <button class="menu-button">
           <span class="hamburger"></span>
@@ -70,14 +70,23 @@
             <div class="ticker-card">
               <h3>MSFT</h3>
               <span class="percentage positive">+1.2%</span>
+              <div class="ticker-chart-area h-[60px]">
+                <Line v-if="msftTickerData" :data="msftTickerData" :options="tickerChartOptions" />
+              </div>
             </div>
             <div class="ticker-card">
               <h3>AAPL</h3>
               <span class="percentage positive">+2.1%</span>
+              <div class="ticker-chart-area h-[60px]">
+                <Line v-if="aaplTickerData" :data="aaplTickerData" :options="tickerChartOptions" />
+              </div>
             </div>
             <div class="ticker-card">
               <h3>AMZN</h3>
               <span class="percentage positive">+3.2%</span>
+              <div class="ticker-chart-area h-[60px]">
+                <Line v-if="amznTickerData" :data="amznTickerData" :options="tickerChartOptions" />
+              </div>
             </div>
             <div class="add-ticker">
                 <Icon name="i-ph-plus-thin" class="size-12 text-[#F96E53]" />
@@ -100,9 +109,10 @@
             </span>
             <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>117.52USD</span>
             </div>
-            <div class="chart-area h-[80px] mb-2">
+            <div class="chart-area h-[180px] mb-2">
             <div class="relative h-full w-full">
-                ...
+              <Line v-if="msftChartData" :data="msftChartData" :options="msftChartOptions" />
+              <p v-else>Loading MSFT Data...</p>
             </div>
             </div>
         </div>
@@ -123,9 +133,10 @@
             </span>
             <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>29.4B</span>
             </div>
-            <div class="chart-area h-[80px] mb-2">
+            <div class="chart-area h-[180px] mb-2">
             <div class="relative h-full w-full">
-                ...
+              <Line v-if="aaplChartData" :data="aaplChartData" :options="aaplChartOptions" />
+              <p v-else>Loading AAPL Data...</p>
             </div>
             </div>
         </div>
@@ -146,9 +157,10 @@
             </span>
             <span class="price text-[#000000] font-semibold text-base"><span class="text-[#DE3819]">$</span>142.75USD</span>
             </div>
-            <div class="chart-area h-[80px] mb-2">
+            <div class="chart-area h-[180px] mb-2">
             <div class="relative h-full w-full">
-                ...
+              <Line v-if="amznChartData" :data="amznChartData" :options="amznChartOptions" />
+              <p v-else>Loading AMZN Data...</p>
             </div>
             </div>
         </div>
@@ -337,6 +349,377 @@ const handleSearch = async () => {
 const toggleListening = () => {
   isListening.value = !isListening.value;
 };
+
+// Common chart options with smaller font size for labels
+const commonChartOptions = {
+  responsive: true,
+  scales: {
+    y: {
+      beginAtZero: false,
+      grid: {
+        color: 'rgba(0, 0, 0, 0.1)',
+      },
+      ticks: {
+        font: {
+          size: 10 // Smaller font size
+        }
+      }
+    },
+    x: {
+      grid: {
+        display: false,
+      },
+      ticks: {
+        font: {
+          size: 8 // Smaller font size for x-axis
+        },
+        maxRotation: 0 // Prevent rotation of labels
+      }
+    }
+  },
+  plugins: {
+    legend: {
+      display: false
+    }
+  }
+};
+
+// Ticker specific chart options - even more minimal
+const tickerChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    y: {
+      display: false // No y-axis for ticker charts
+    },
+    x: {
+      display: false // No x-axis for ticker charts
+    }
+  },
+  plugins: {
+    legend: {
+      display: false
+    },
+    tooltip: {
+      enabled: false // Disable tooltips for ticker charts
+    }
+  },
+  elements: {
+    point: {
+      radius: 0 // No points on the line
+    },
+    line: {
+      tension: 0.4 // Smooth curve
+    }
+  }
+};
+
+// --- Data and Options for MSFT ---
+const msftChartData = ref<ChartData<'line'> | null>(null);
+const msftChartOptions = ref(commonChartOptions);
+const msftTickerData = ref<ChartData<'line'> | null>(null);
+
+// --- Data and Options for AAPL ---
+const aaplChartData = ref<ChartData<'line'> | null>(null);
+const aaplChartOptions = ref(commonChartOptions);
+const aaplTickerData = ref<ChartData<'line'> | null>(null);
+
+// --- Data and Options for AMZN ---
+const amznChartData = ref<ChartData<'line'> | null>(null);
+const amznChartOptions = ref(commonChartOptions);
+const amznTickerData = ref<ChartData<'line'> | null>(null);
+
+// --- Interfaces for Type Safety ---
+interface OHLCVData {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  vol: number;
+  "Total return": string;
+  "Anualized return": string;
+  Max: number;
+  Min: number;
+}
+
+interface StockData {
+  [date: string]: OHLCVData;
+}
+
+interface CompanyData {
+  [companyName: string]: StockData;
+}
+
+interface OHLCVResponse {
+  message: string;
+  object: string; // Keep this as string since it's raw JSON
+}
+
+// --- Data Constants (using template literals for the JSON) ---
+
+const MSFT_OHLCV: OHLCVResponse = {
+  "message": "Plots correctly shown to user. Answer the user.\n\n|              |   First |   Last |   Min |    Max | Return   |\n|:-------------|--------:|-------:|------:|-------:|:---------|\n| Microsoft Rg |  373.69 | 386.84 | 366.5 | 468.33 | 4.22%    |",
+  "object": `{
+    "tool": "OHLC", "data": {
+        "Microsoft Rg": {
+            "2024-01-02T00:00:00.000":{
+                "open":373.69,
+                "high":375.9,
+                "low":366.8,
+                "close":370.87,
+                "vol":9512457,
+                "Total return":"0.00%",
+                "Anualized return":"0.00%",
+                "Max":375.9,
+                "Min":366.8
+            },
+            "2024-01-03T00:00:00.000":{
+                "open":369.15,
+                "high":373.25,
+                "low":368.54,
+                "close":370.6,
+                "vol":7687170,
+                "Total return":"-0.07%",
+                "Anualized return":"-23.35%",
+                "Max":375.9,
+                "Min":366.8
+            },
+            "2024-01-04T00:00:00.000":{
+                "open":370.83,
+                "high":373.1,
+                "low":367.18,
+                "close":367.94,
+                "vol":7638925,
+                "Total return":"-0.79%",
+                "Anualized return":"-76.62%",
+                "Max":375.9,
+                "Min":366.8
+            },
+            "2024-01-05T00:00:00.000":{
+                "open":369.04,
+                "high":372.05,
+                "low":369.04,
+                "close":370.05,
+                "vol":7638925,
+                "Total return":"-0.79%",
+                "Anualized return":"-76.62%",
+                "Max":375.9,
+                "Min":366.8
+            },
+            "...": {}
+        }
+    }
+}`
+};
+
+const APPL_OHLCV: OHLCVResponse = {
+  "message": "Plots correctly shown to user. Answer the user.\n\n|          |   First |   Last |    Min |    Max | Return   |\n|:---------|--------:|-------:|-------:|-------:|:---------|\n| Apple Rg |  187.03 |  214.1 | 164.08 | 260.09 | 14.26%   |",
+  "object": `{
+    "tool": "OHLC", "data": {
+        "Apple Rg": {
+            "2024-01-02T00:00:00.000":{
+                "open":187.03,
+                "high":188.43,
+                "low":183.89,
+                "close":185.64,
+                "vol":22968773,
+                "Total return":"0.00%",
+                "Anualized return":"0.00%",
+                "Max":188.43,
+                "Min":183.89
+            },
+            "2024-01-03T00:00:00.000":{
+                "open":184.2,
+                "high":185.87,
+                "low":183.44,
+                "close":184.25,
+                "vol":16179899,
+                "Total return":"-0.75%",
+                "Anualized return":"-93.63%",
+                "Max":188.43,
+                "Min":183.44
+            },
+            "2024-01-04T00:00:00.000":{
+                "open":182.0,
+                "high":183.08,
+                "low":180.88,
+                "close":181.91,
+                "vol":17660045,
+                "Total return":"-2.03%",
+                "Anualized return":"-97.63%",
+                "Max":188.43,
+                "Min":180.88
+            },
+            "2024-01-05T00:00:00.000":{
+                "open":181.9,
+                "high":182.76,
+                "low":180.17,
+                "close":181.18,
+                "vol":18597031,
+                "Total return":"-2.42%",
+                "Anualized return":"-98.22%",
+                "Max":188.43,
+                "Min":180.17
+            },
+            "...": {}
+        }
+    }
+}`
+};
+
+const AMZN_OHLCV: OHLCVResponse = {
+  "message": "Plots correctly shown to user. Answer the user.\n\n|               |   First |   Last |    Min |    Max | Return   |\n|:--------------|--------:|-------:|-------:|-------:|:---------|\n| Amazon.Com Rg |  151.64 | 194.95 | 144.05 | 242.51 | 26.26%   |",
+  "object": `{
+    "tool": "OHLC", "data": {
+        "Amazon.Com Rg": {
+            "2024-01-02T00:00:00.000": {
+                "open": 151.64,
+                "high": 152.37,
+                "low": 148.4,
+                "close": 149.93,
+                "vol": 12369535,
+                "Total return": "0.00%",
+                "Anualized return": "0.00%",
+                "Max": 152.37,
+                "Min": 148.4
+            },
+            "2024-01-03T00:00:00.000": {
+                "open": 149.16,
+                "high": 151.04,
+                "low": 148.34,
+                "close": 148.47,
+                "vol": 12548741,
+                "Total return": "-0.98%",
+                "Anualized return": "-97.24%",
+                "Max": 152.37,
+                "Min": 148.34
+            },
+            "2024-01-04T00:00:00.000": {
+                "open": 145.63,
+                "high": 147.37,
+                "low": 144.05,
+                "close": 144.57,
+                "vol": 15355039,
+                "Total return": "-3.64%",
+                "Anualized return": "-99.88%",
+                "Max": 152.37,
+                "Min": 144.05
+            },
+            "2024-01-05T00:00:00.000": {
+                "open": 144.61,
+                "high": 146.59,
+                "low": 144.53,
+                "close": 145.24,
+                "vol": 14704172,
+                "Total return": "-3.13%",
+                "Anualized return": "-99.83%",
+                "Max": 152.37,
+                "Min": 144.05
+            },
+            "...": {}
+        }
+    }
+}`
+};
+
+onMounted(() => {
+  // Simulate data loading with different delays
+  setTimeout(() => {
+    const parsedData: CompanyData = JSON.parse(MSFT_OHLCV.object).data;
+    const closePrices = Object.values(parsedData["Microsoft Rg"]).map((item: OHLCVData) => item.close);
+    const labels = Object.keys(parsedData["Microsoft Rg"]);
+    
+    // Create main chart data
+    msftChartData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'MSFT Stock Price',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.2)',
+        tension: 0.4,
+        pointRadius: 0,
+      }]
+    };
+    
+    // Create ticker mini chart data
+    msftTickerData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'MSFT',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    };
+  }, 500);
+
+  setTimeout(() => {
+    const parsedData: CompanyData = JSON.parse(APPL_OHLCV.object).data;
+    const closePrices = Object.values(parsedData["Apple Rg"]).map((item: OHLCVData) => item.close);
+    const labels = Object.keys(parsedData["Apple Rg"]);
+    
+    // Create main chart data
+    aaplChartData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'AAPL Stock Price',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.2)',
+        tension: 0.4,
+        pointRadius: 0,
+      }]
+    };
+    
+    // Create ticker mini chart data
+    aaplTickerData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'AAPL',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    };
+  }, 1500);
+
+  setTimeout(() => {
+    const parsedData: CompanyData = JSON.parse(AMZN_OHLCV.object).data;
+    const closePrices = Object.values(parsedData["Amazon.Com Rg"]).map((item: OHLCVData) => item.close);
+    const labels = Object.keys(parsedData["Amazon.Com Rg"]);
+    
+    // Create main chart data
+    amznChartData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'AMZN Stock Price',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.2)',
+        tension: 0.4,
+        pointRadius: 0,
+      }]
+    };
+    
+    // Create ticker mini chart data
+    amznTickerData.value = {
+      labels: labels,
+      datasets: [{
+        label: 'AMZN',
+        data: closePrices,
+        borderColor: '#F96E53',
+        backgroundColor: 'rgba(249, 110, 83, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    };
+  }, 1000);
+});
 </script>
 
 <style scoped>
@@ -398,8 +781,15 @@ const toggleListening = () => {
   background-color: white;
   border-radius: 25px;
   padding: 15px;
-  height: 130px;
+  height: 150px;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ticker-chart-area {
+  margin-top: auto;
+  width: 100%;
 }
 
 .add-ticker {
@@ -610,11 +1000,12 @@ const toggleListening = () => {
 }
 
 .percentage.positive {
-  color: #ff6b6b;
+  color: #F96E53;
   background-color: #ffedea;
-  padding: 5px 10px;
+  padding: 2px 8px;
   border-radius: 20px;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .view-button {
