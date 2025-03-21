@@ -194,7 +194,7 @@
       <!-- Voice assistant area - positioned in bottom right -->
       <div class="voice-assistant">
         <!-- Debug button -->
-        <button @click="testQueryChips" class="debug-button">Test Chips</button>
+        <!-- <button @click="testQueryChips" class="debug-button">Test Chips</button> -->
         
         <!-- Query chips will appear above the logo -->
         <div class="query-chips-wrapper">
@@ -1220,7 +1220,7 @@ onMounted(() => {
   right: 0;
   margin-bottom: 20px;
   z-index: 51;
-  border: 2px solid rgba(255, 0, 0, 0.3);
+  /* border: 2px solid rgba(255, 0, 0, 0.3); */
   min-height: 50px;
   max-height: 300px;
   overflow-y: auto;
