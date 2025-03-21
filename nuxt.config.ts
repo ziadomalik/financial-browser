@@ -37,6 +37,7 @@ export default defineNuxtConfig({
     openaiApiKey: process.env.OPENAI_API_KEY,
     newsApiKey: process.env.NEWS_API_KEY,
     apiBaseUrl: process.env.API_BASE_URL,
+    finnhubApiKey: process.env.FINNHUB_API_KEY,
   },
 
   // Explicitly set the port
