@@ -53,11 +53,15 @@ export default defineEventHandler(async (event) => {
             // Transcribe the file directly
             const transcriptionResult = await transcribeAudioChunk(filePath)
             
+            // Generate query chips based on transcription
+            const queryChips = generateQueryChips(transcriptionResult)
+            
             return {
                 success: true,
                 message: 'Audio received and transcribed',
                 fileName,
-                transcription: transcriptionResult
+                transcription: transcriptionResult,
+                queryChips: queryChips
             }
         } catch (writeError: any) {
             console.error('Error processing audio file:', {
@@ -121,6 +125,74 @@ async function transcribeAudioChunk(audioFilePath: string): Promise<string> {
         
         return `Error transcribing audio: ${error.message}`
     }
+}
+
+// Add a simple version of the generate function to guarantee at least some chips
+function generateQueryChips(transcription: string): Array<{text: string, type: string}> {
+    // If the transcription is empty or an error, return empty array
+    if (!transcription || transcription.startsWith('Error')) {
+        return [];
+    }
+    
+    console.log('Generating query chips from:', transcription)
+    
+    // Always include at least one default chip for testing
+    const chips = [{
+        text: 'Finance Research',
+        type: 'general'
+    }];
+    
+    // Extract key terms from transcription
+    const keywords = [
+        { term: 'stock', type: 'general' },
+        { term: 'market', type: 'general' },
+        { term: 'tech', type: 'tech' },
+        { term: 'volatile', type: 'volatile' },
+        { term: 'crash', type: 'crash' },
+        { term: 'microsoft', type: 'msft' },
+        { term: 'apple', type: 'aapl' },
+        { term: 'amazon', type: 'amzn' },
+        { term: 'nvidia', type: 'nvidia' },
+        { term: 'nasdaq', type: 'nasdaq' },
+        { term: 'federal', type: 'administration' }
+    ];
+    
+    // Find any keywords in the transcription
+    const text = transcription.toLowerCase();
+    keywords.forEach(({ term, type }) => {
+        if (text.includes(term)) {
+            // Find the word and a bit of context
+            const words = text.split(' ');
+            const index = words.findIndex(w => w.includes(term));
+            if (index >= 0) {
+                const start = Math.max(0, index - 1);
+                const end = Math.min(words.length, index + 2);
+                const phrase = words.slice(start, end).join(' ');
+                
+                // Capitalize first letter
+                const formattedPhrase = phrase.charAt(0).toUpperCase() + phrase.slice(1);
+                
+                chips.push({
+                    text: formattedPhrase,
+                    type
+                });
+            }
+        }
+    });
+    
+    // Add stock symbols (uppercase 1-5 letter words)
+    const symbolRegex = /\b[A-Z]{1,5}\b/g;
+    const symbols = transcription.match(symbolRegex) || [];
+    symbols.forEach(symbol => {
+        chips.push({
+            text: symbol,
+            type: 'general'
+        });
+    });
+    
+    // Limit to 5 chips
+    console.log('Generated chips:', chips.slice(0, 5))
+    return chips.slice(0, 5);
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

@@ -33,7 +33,7 @@ const props = defineProps<{
     isListening?: boolean 
 }>()
 
-const emit = defineEmits(['update:isListening'])
+const emit = defineEmits(['update:isListening', 'queryChipsUpdate'])
 
 const transcription = ref('')
 const displayWords = ref<{text: string, isNew: boolean, isExiting: boolean, isLastInSentence: boolean}[]>([])
@@ -146,7 +146,11 @@ const sendAudioChunk = async (audioBlob: Blob) => {
         const formData = new FormData()
         formData.append('audio', audioBlob)
         
-        const response = await $fetch<{ success: boolean; transcription: string }>('/api/audio', {
+        const response = await $fetch<{ 
+            success: boolean; 
+            transcription: string;
+            queryChips?: Array<{text: string, type: string}>;
+        }>('/api/audio', {
             method: 'POST',
             body: formData,
         })
@@ -212,6 +216,11 @@ const sendAudioChunk = async (audioBlob: Blob) => {
                 setTimeout(() => {
                     displayWords.value = displayWords.value.slice(excessCount)
                 }, 500) // Match this to the CSS transition duration
+            }
+            
+            // Emit query chips to parent component if they exist
+            if (response.queryChips && response.queryChips.length > 0) {
+                emit('queryChipsUpdate', response.queryChips)
             }
         }
     } catch (error) {

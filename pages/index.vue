@@ -191,11 +191,37 @@
             </div>
           </div>
 
-          <!-- Voice assistant area -->
-          <div class="voice-assistant">
-            <SenseLogo v-model:isListening="isListening" />
-            <p v-if="isListening" class="listening-text">Listening...</p>
-          </div>
+      <!-- Voice assistant area - positioned in bottom right -->
+      <div class="voice-assistant">
+        <!-- Debug button -->
+        <button @click="testQueryChips" class="debug-button">Test Chips</button>
+        
+        <!-- Query chips will appear above the logo -->
+        <div class="query-chips-wrapper">
+          <transition-group 
+            name="chip-fade" 
+            tag="div" 
+            class="query-chips"
+          >
+            <div 
+              v-for="(chip, index) in queryChips" 
+              :key="`chip-${index}`" 
+              class="chip" 
+              :class="chip.type"
+              @click="handleChipClick(chip)"
+            >
+              {{ chip.text }}
+            </div>
+          </transition-group>
+        </div>
+        
+        <!-- Logo component with proper event binding -->
+        <SenseLogo 
+          v-model:isListening="isListening" 
+          @queryChipsUpdate="updateQueryChips"
+        />
+        <p v-if="isListening" class="listening-text">Listening...</p>
+      </div>
 
           <!-- Action buttons -->
           <div class="action-buttons-container">
@@ -248,21 +274,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-// Using type definition comments instead of imports to avoid module resolution issues
-// @ts-ignore
-interface ChartData<T extends string = any> {
-  labels?: any[];
-  datasets: {
-    label?: string;
-    data: any[];
-    borderColor?: string;
-    backgroundColor?: string;
-    tension?: number;
-    pointRadius?: number;
-    fill?: boolean;
-  }[];
-}
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+
+import { Line } from 'vue-chartjs';
+import type { ChartData, ChartOptions } from 'chart.js';
+import { 
+  Chart as ChartJS, 
+  Title, 
+  Tooltip, 
+  Legend, 
+  BarElement, 
+  CategoryScale, 
+  LinearScale,
+  PointElement,
+  LineElement
+} from 'chart.js'
+
+// Register ALL required chart elements
+ChartJS.register(
+  Title, 
+  Tooltip, 
+  Legend, 
+  BarElement, 
+  CategoryScale, 
+  LinearScale,
+  PointElement,
+  LineElement
+)
 
 const isListening = ref(false);
 const searchQuery = ref('');
@@ -270,6 +308,7 @@ const isLoading = ref(false);
 const currentJobId = ref<string | null>(null);
 const result = ref<any>('');
 const user = useSupabaseUser();
+const queryChips = ref<Array<{text: string, type: string}>>([]);
 
 // Get socket instance
 const { $socket } = useNuxtApp();
@@ -813,6 +852,43 @@ onMounted(() => {
     };
   }, 1000);
 });
+
+// Debug-friendly query chips handling
+const updateQueryChips = (chips: Array<{text: string, type: string}>) => {
+  console.log('INDEX: Received query chips:', chips)
+  
+  // Force immediate update and use setTimeout to ensure DOM updates
+  queryChips.value = [];
+  
+  // Add each chip immediately instead of with animation timing
+  setTimeout(() => {
+    queryChips.value = [...chips];
+    console.log('Chips updated:', queryChips.value);
+  }, 100);
+}
+
+// Handle click on a query chip
+const handleChipClick = (chip: {text: string, type: string}) => {
+  console.log("Chip clicked:", chip); // Debug log
+  searchQuery.value = chip.text;
+  handleSearch();
+}
+
+// Add a test function to manually trigger chips for debugging
+const testQueryChips = () => {
+  const testChips = [
+    { text: 'Test Chip 1', type: 'tech' },
+    { text: 'Test Chip 2', type: 'volatile' },
+    { text: 'Test Chip 3', type: 'general' }
+  ]
+  updateQueryChips(testChips)
+}
+
+// For debugging, call the test function on mounted (remove in production)
+onMounted(() => {
+  // Uncomment to test chips on page load
+  // setTimeout(testQueryChips, 3000)
+})
 </script>
 
 <style scoped>
@@ -1127,6 +1203,54 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(249, 110, 83, 0.2);
 }
 
+.voice-assistant {
+  position: fixed;
+  right: 30px;
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 50;
+}
+
+.query-chips-wrapper {
+  position: absolute;
+  width: 300px;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 20px;
+  z-index: 51;
+  border: 2px solid rgba(255, 0, 0, 0.3);
+  min-height: 50px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.voice-assistant {
+  position: fixed;
+  right: 30px;
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 50;
+}
+
+.query-chips-wrapper {
+  position: absolute;
+  width: 300px;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 20px;
+  z-index: 51;
+  border: 2px solid rgba(255, 0, 0, 0.3);
+  min-height: 50px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
 .query-chips {
   grid-column: 10 / 13;
   grid-row: 1 / 5; /* Extend to row 5 to match action buttons */
@@ -1138,65 +1262,48 @@ onMounted(() => {
 }
 
 .chip {
-  padding: 12px 15px;
-  border-radius: 30px;
+  background-color: white;
+  color: #333;
+  padding: 12px 16px;
+  border-radius: 20px;
   text-align: center;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 4px solid #DE3819;
+  opacity: 1 !important;
 }
 
-.volatile {
-  background-color: #ff8f8f;
-  color: white;
+.chip:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
-.tech {
-  background-color: #f9edcf;
+.chip-fade-enter-active {
+  transition: all 0.5s ease;
 }
 
-.nvidia {
-  background-color: #e0cfff;
+.chip-fade-leave-active {
+  transition: all 0.3s ease;
 }
 
-.administration {
-  background-color: #c7f5d9;
+.chip-fade-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
 }
 
-.crash {
-  background-color: #c7f5f5;
-}
-
-.msft {
-  background-color: #ffa58f;
-}
-
-.nasdaq {
-  background-color: #d0c7ff;
-}
-
-.voice-assistant {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  z-index: 101; /* Above action buttons */
-}
-
-.mic-button {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background-color: #ffede8;
-  padding: 10px 15px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 10px;
+.chip-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 
 .listening-text {
-  color: #ff6b6b;
+  margin-top: 8px;
+  color: #DE3819;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .percentage.positive {
@@ -1214,6 +1321,169 @@ onMounted(() => {
   border: none;
   padding: 8px 15px;
   border-radius: 20px;
+}
+
+/* Specific styling for different types of chips */
+.volatile { border-left: 4px solid #ff6b6b; }
+.tech { border-left: 4px solid #4ecdc4; }
+.nvidia { border-left: 4px solid #7d5fff; }
+.administration { border-left: 4px solid #2ecc71; }
+.crash { border-left: 4px solid #e74c3c; }
+.msft { border-left: 4px solid #3498db; }
+.aapl { border-left: 4px solid #f39c12; }
+.amzn { border-left: 4px solid #1abc9c; }
+.nasdaq { border-left: 4px solid #9b59b6; }
+.general { border-left: 4px solid #95a5a6; }
+
+.mic-button {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-color: #ffede8;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* Debug button for testing */
+.debug-button {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 100;
+}
+
+.share-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.share-popup {
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.popup-icon {
+  margin-bottom: 15px;
+  display: inline-flex;
+  background-color: rgba(52, 211, 153, 0.1);
+  border-radius: 50%;
+  padding: 15px;
+}
+
+.popup-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.popup-message {
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+.popup-close-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background-color: #f5f5f5;
+  color: #666;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.popup-close-btn:hover {
+  background-color: #F96E53;
+  color: white;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Toast notification */
+.toast-notification {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #4B5563;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 30px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: transform 0.3s, opacity 0.3s;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  transform: translate(-50%, 20px);
+  opacity: 0;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-y: scroll !important; /* Force scrolling */
+  overflow-x: hidden;
+}
+
+#__nuxt, #__layout {
+  min-height: 100vh;
+  height: 100%;
 }
 
 .share-popup-overlay {
