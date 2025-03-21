@@ -197,7 +197,7 @@
         <!-- <button @click="testQueryChips" class="debug-button">Test Chips</button> -->
         
         <!-- Query chips will appear above the logo -->
-        <div class="query-chips-wrapper">
+        <!-- <div class="query-chips-wrapper"> -->
           <transition-group 
             name="chip-fade" 
             tag="div" 
@@ -213,7 +213,7 @@
               {{ chip.text }}
             </div>
           </transition-group>
-        </div>
+        <!-- </div> -->
         
         <!-- Logo component with proper event binding -->
         <SenseLogo 
@@ -258,15 +258,6 @@
           </Transition>
 
           <!-- Query chips -->
-          <div class="query-chips">
-            <div class="chip volatile">" ...volatile..."</div>
-            <div class="chip tech">" ...leading tech..."</div>
-            <div class="chip nvidia">" Compare NVIDIA "</div>
-            <div class="chip administration">" ...new administration "</div>
-            <div class="chip crash">" market crash "</div>
-            <div class="chip msft">" MSFT "</div>
-            <div class="chip nasdaq">" NASDAQ "</div>
-          </div>
         </div>
       </div>
     </div>
