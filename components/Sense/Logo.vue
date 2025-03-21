@@ -1,5 +1,7 @@
 <template>
-    <div class="logo-container" :class="{ 'animate': animation !== false, 'no-hover': disableHover }">
+    <div class="logo-container" 
+         :class="{ 'animate': animation !== false, 'no-hover': disableHover, 'listening-mode': isListening }"
+         @click="toggleListening">
         <svg width="250" height="250" viewBox="0 0 250 250" fill="none" xmlns="http://www.w3.org/2000/svg">
             <g class="logo-elements">
                 <circle class="outer-circle" cx="125" cy="125" r="125" fill="#DE3819" fill-opacity="0.05" />
@@ -10,11 +12,226 @@
                     fill="#DE3819" />
             </g>
         </svg>
+        
+        <div v-if="isListening && transcription" class="transcription-container">
+            <div class="transcription-text">
+                <template v-for="(word, index) in displayWords" :key="index">
+                    <span :class="{'word-enter': word.isNew, 'word-exit': word.isExiting}">
+                        {{ word.text }}
+                    </span>
+                    <span class="word-space"> </span>
+                </template>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{ animation?: boolean, disableHover?: boolean }>()
+const props = defineProps<{ 
+    animation?: boolean, 
+    disableHover?: boolean,
+    isListening?: boolean 
+}>()
+
+const emit = defineEmits(['update:isListening'])
+
+const transcription = ref('')
+const displayWords = ref<{text: string, isNew: boolean, isExiting: boolean, isLastInSentence: boolean}[]>([])
+const maxWords = 6
+const audioChunks: Blob[] = []
+let mediaRecorder: MediaRecorder | null = null
+let recordingInterval: NodeJS.Timeout | null = null
+const isRecording = ref(false)
+
+// Toggle the listening state
+const toggleListening = () => {
+    if (!props.isListening) {
+        startRecording()
+        emit('update:isListening', true)
+    } else {
+        stopRecording()
+        emit('update:isListening', false)
+    }
+}
+
+// Start recording function
+const startRecording = async () => {
+    try {
+        // Request microphone access
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        
+        // Configure media recorder
+        const options = { 
+            mimeType: 'audio/webm',
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, options)
+        
+        // Set up event handlers for audio chunks
+        mediaRecorder.addEventListener('dataavailable', (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data)
+            }
+        })
+        
+        mediaRecorder.addEventListener('stop', async () => {
+            // When stopped, process all audio data
+            if (audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+                await sendAudioChunk(audioBlob)
+                audioChunks.length = 0 // Clear the chunks
+            }
+        })
+        
+        // Start recording
+        mediaRecorder.start()
+        isRecording.value = true
+        
+        // Set up interval to periodically stop, process, and restart recording
+        recordingInterval = setInterval(() => {
+            if (mediaRecorder && isRecording.value) {
+                mediaRecorder.stop() // This will trigger the 'stop' event
+                
+                // Start a new recording session after a short delay
+                setTimeout(() => {
+                    if (isRecording.value && stream.active) {
+                        mediaRecorder = new MediaRecorder(stream, options)
+                        
+                        mediaRecorder.addEventListener('dataavailable', (event) => {
+                            if (event.data.size > 0) {
+                                audioChunks.push(event.data)
+                            }
+                        })
+                        
+                        mediaRecorder.addEventListener('stop', async () => {
+                            if (audioChunks.length > 0) {
+                                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+                                await sendAudioChunk(audioBlob)
+                                audioChunks.length = 0
+                            }
+                        })
+                        
+                        mediaRecorder.start()
+                    }
+                }, 100)
+            }
+        }, 5000) // Process every 5 seconds
+    } catch (error) {
+        console.error('Error setting up audio recording:', error)
+        emit('update:isListening', false)
+    }
+}
+
+// Stop recording function
+const stopRecording = () => {
+    isRecording.value = false
+    
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop()
+    }
+    
+    // Clear the interval
+    if (recordingInterval) {
+        clearInterval(recordingInterval)
+    }
+    
+    // Clear transcription
+    transcription.value = ''
+    displayWords.value = []
+}
+
+// Send audio chunk to the server
+const sendAudioChunk = async (audioBlob: Blob) => {
+    try {
+        const formData = new FormData()
+        formData.append('audio', audioBlob)
+        
+        const response = await $fetch<{ success: boolean; transcription: string }>('/api/audio', {
+            method: 'POST',
+            body: formData,
+        })
+        
+        if (response.success && response.transcription) {
+            // Process transcription text
+            let processedText = response.transcription
+            
+            // Handle potential unicode space issues or zero-width spaces
+            processedText = processedText.replace(/[\u200B-\u200D\uFEFF]/g, ' ')
+            
+            // Force space between any letter/number and another letter/number of different case
+            processedText = processedText.replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+            processedText = processedText.replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+            processedText = processedText.replace(/([0-9])([A-Za-z])/g, '$1 $2')
+            processedText = processedText.replace(/([A-Za-z])([0-9])/g, '$1 $2')
+            
+            // Add spaces around punctuation
+            processedText = processedText.replace(/([.,!?;:,])/g, '$1 ')
+            
+            // Break up obvious CamelCase and PascalCase patterns
+            processedText = processedText
+                .replace(/([a-z])([A-Z])/g, '$1 $2')
+                .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+            
+            // Normalize multiple spaces to single space
+            processedText = processedText.replace(/\s+/g, ' ').trim()
+            
+            // Update the transcription value
+            transcription.value = processedText
+            
+            // Create a more clean way to split the words
+            const words = processedText.split(' ').filter(w => w.trim())
+            
+            const newWords = words.map((word) => ({
+                text: word,
+                isNew: true, 
+                isExiting: false,
+                isLastInSentence: false
+            }))
+            
+            displayWords.value = [...displayWords.value, ...newWords]
+            
+            // After a short delay, remove the "new" status
+            setTimeout(() => {
+                displayWords.value = displayWords.value.map(word => ({
+                    ...word,
+                    isNew: false
+                }))
+            }, 500)
+            
+            // If we have too many words, mark oldest ones for exit animation
+            if (displayWords.value.length > maxWords) {
+                const excessCount = displayWords.value.length - maxWords
+                
+                // Mark words that will be removed as exiting
+                displayWords.value = displayWords.value.map((word, index) => ({
+                    ...word,
+                    isExiting: index < excessCount
+                }))
+                
+                // After animation completes, remove the exiting words
+                setTimeout(() => {
+                    displayWords.value = displayWords.value.slice(excessCount)
+                }, 500) // Match this to the CSS transition duration
+            }
+        }
+    } catch (error) {
+        console.error('Error sending audio chunk:', error)
+    }
+}
+
+// Clean up when component is unmounted
+onBeforeUnmount(() => {
+    stopRecording()
+})
+
+// Watch for changes in the isListening prop
+watch(() => props.isListening, (newVal) => {
+    if (newVal && !isRecording.value) {
+        startRecording()
+    } else if (!newVal && isRecording.value) {
+        stopRecording()
+    }
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -68,6 +285,33 @@ defineProps<{ animation?: boolean, disableHover?: boolean }>()
     animation: none;
 }
 
+/* Listening mode styles - more vibrant/aggressive animations */
+.logo-container.listening-mode {
+    transform: scale(1.2);
+}
+
+.logo-container.listening-mode .outer-circle {
+    animation: pulse-listening-outer 2s ease-in-out infinite;
+    fill: #DE3819;
+    fill-opacity: 0.15;
+}
+
+.logo-container.listening-mode .middle-circle {
+    animation: pulse-listening-middle 1.5s ease-in-out infinite;
+    fill: #DE3819;
+    fill-opacity: 0.2;
+}
+
+.logo-container.listening-mode .inner-circle {
+    animation: pulse-listening-inner 1s ease-in-out infinite;
+    fill: #DE3819;
+    fill-opacity: 0.25;
+}
+
+.logo-container.listening-mode path {
+    animation: pulse-microphone 1s ease-in-out infinite;
+}
+
 @keyframes pulse-outer {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.03); }
@@ -98,6 +342,27 @@ defineProps<{ animation?: boolean, disableHover?: boolean }>()
     50% { transform: scale(0.95); }
 }
 
+/* Listening mode animations - more vibrant */
+@keyframes pulse-listening-outer {
+    0%, 100% { transform: scale(1.05); }
+    50% { transform: scale(1.15); }
+}
+
+@keyframes pulse-listening-middle {
+    0%, 100% { transform: scale(1.08); }
+    50% { transform: scale(1.2); }
+}
+
+@keyframes pulse-listening-inner {
+    0%, 100% { transform: scale(1.1); }
+    50% { transform: scale(0.9); }
+}
+
+@keyframes pulse-microphone {
+    0%, 100% { fill: #DE3819; }
+    50% { fill: #ff4c2e; }
+}
+
 circle, ellipse, path {
     transform-origin: center;
 }
@@ -110,5 +375,56 @@ circle, ellipse, path {
 
 svg {
     overflow: visible;
+}
+
+/* Transcription styles */
+.transcription-container {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 300px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    padding: 10px;
+    margin-top: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+.transcription-text {
+    font-size: 14px;
+    color: #333;
+}
+
+.word-enter {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeIn 0.4s forwards;
+}
+
+.word-exit {
+    opacity: 1;
+    transform: translateY(0);
+    animation: fadeOut 0.4s forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+.word-space {
+    display: inline-block;
+    width: 0.3em;
 }
 </style>
