@@ -21,7 +21,7 @@ export const useTabsStore = defineStore('tabs', {
   },
   
   actions: {
-    addTab(title: string = 'New Tab', content: any = {}) {
+    addTab(title: string = 'Client Call', content: any = {}) {
       const id = `tab-${Date.now()}`
       
       // Deactivate all other tabs

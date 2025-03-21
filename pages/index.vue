@@ -8,7 +8,7 @@
   <div class="dashboard-container w-full h-full">
     <!-- Header section -->
     <div class="client-profile w-full h-[130px] bg-[#F6F6F6] rounded-[20px]">
-      <div class="profile-info">
+      <div class="profile-info mr-6">
         <button class="menu-button">
           <span class="hamburger"></span>
         </button>
@@ -16,11 +16,27 @@
             <Icon name="i-streamline-interface-setting-menu-2-button-parallel-horizontal-lines-menu-navigation-staggered-three-hamburger" class="size-6 text-[#292929] rounded-full" />
         </div>
         <div class="avatar bg-[#333] flex items-center justify-center overflow-hidden">
-            <img src="~/assets/images/ziad-profile.jpeg" alt="Ziad Malik" class="w-full h-full object-cover" />
+            <img src="~/assets/images/Zeno-profile-picture.jpeg" alt="Zeno Hamers" class="w-full h-full object-cover" />
         </div>
         <div class="user-info">
-          <h2 class="text-[#3E3E3E] font-semibold">Ziad Malik</h2>
+          <h2 class="text-[#3E3E3E] font-semibold">Zeno Hamers</h2>
           <p class="text-[#626262] font-medium">Dashboard</p>
+        </div>
+      </div>
+      
+      <!-- Key customer profile characteristics -->
+      <div class="profile-characteristics flex-1 flex justify-center gap-3 mx-4 ml-2">
+        <div class="characteristic-item flex-1">
+          <span class="characteristic-label">Mandate:</span>
+          <span class="characteristic-value">Discretionary</span>
+        </div>
+        <div class="characteristic-item flex-1">
+          <span class="characteristic-label">Financial Literacy:</span>
+          <span class="characteristic-value">Medium</span>
+        </div>
+        <div class="characteristic-item flex-1">
+          <span class="characteristic-label">Risk Aversion:</span>
+          <span class="characteristic-value">High</span>
         </div>
       </div>
       
@@ -170,13 +186,37 @@
       <div class="action-buttons">
         <button class="insights-button">
           More insights
-          <Icon name="i-heroicons-plus" class="size-4 text-white" />
+          <Icon name="i-heroicons-plus" class="size-5 text-white" />
         </button>
-        <button class="share-button flex items-center gap-2 text-[#F96E53] border border-[#F96E53] rounded-full py-2 px-6">
-          <span class="text-[#F96E53]">Share insights</span>
-          <Icon name="i-heroicons-share" class="size-4 text-[#F96E53]" />
+        <button class="share-button flex items-center gap-2 text-[#F96E53] border border-[#F96E53] rounded-full" @click="showSharePopup">
+          <span class="text-[#F96E53]">Share insights with Client</span>
+          <Icon name="i-heroicons-share" class="size-5 text-[#F96E53]" />
         </button>
       </div>
+
+      <!-- Share Popup -->
+      <Transition name="fade">
+        <div v-if="isPopupVisible" class="share-popup-overlay" @click.self="closePopup">
+          <div class="share-popup">
+            <div class="popup-icon">
+              <Icon name="i-heroicons-check-circle" class="size-12 text-[#34D399]" />
+            </div>
+            <h3 class="popup-title">Custom dashboard for {{ clientName }} created</h3>
+            <p class="popup-message">Copied to clipboard, share with one click</p>
+            <button @click="closePopup" class="popup-close-btn">
+              <Icon name="i-heroicons-x-mark" class="size-5" />
+            </button>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Toast Notification -->
+      <Transition name="toast">
+        <div v-if="isToastVisible" class="toast-notification">
+          <Icon name="i-heroicons-clipboard-document-check" class="size-5 mr-2 text-white" />
+          <span>Link copied to clipboard</span>
+        </div>
+      </Transition>
 
       <!-- Query chips -->
       <div class="query-chips">
@@ -337,6 +377,42 @@ const handleSearch = async () => {
 const toggleListening = () => {
   isListening.value = !isListening.value;
 };
+
+const isPopupVisible = ref(false);
+const isToastVisible = ref(false);
+const clientName = ref('');
+
+const showSharePopup = () => {
+  // Create shareable link
+  const shareableLink = `https://financial-browser/dashboard/${Date.now()}`;
+  
+  // Copy to clipboard
+  navigator.clipboard.writeText(shareableLink)
+    .then(() => {
+      console.log('Dashboard link copied to clipboard');
+    })
+    .catch(err => {
+      console.error('Could not copy text: ', err);
+    });
+  
+  isPopupVisible.value = true;
+  clientName.value = 'Zeno Hamers';
+  
+  // Auto-hide popup after 3 seconds
+  setTimeout(() => {
+    isPopupVisible.value = false;
+  }, 3000);
+};
+
+const closePopup = () => {
+  isPopupVisible.value = false;
+  
+  // Show toast notification
+  isToastVisible.value = true;
+  setTimeout(() => {
+    isToastVisible.value = false;
+  }, 2000);
+};
 </script>
 
 <style scoped>
@@ -354,17 +430,62 @@ const toggleListening = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-wrap: nowrap;
 }
 
 .profile-info {
   display: flex;
   gap: 15px;
   align-items: center;
+  flex-shrink: 0;
+  padding-right: 10px;
+}
+
+.profile-characteristics {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+}
+
+.characteristic-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background-color: white;
+  border-radius: 10px;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  overflow: hidden;
+}
+
+.characteristic-label {
+  font-size: 12px;
+  color: #626262;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.characteristic-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3E3E3E;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .right-section {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .search-container {
@@ -623,5 +744,116 @@ const toggleListening = () => {
   border: none;
   padding: 8px 15px;
   border-radius: 20px;
+}
+
+.share-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.share-popup {
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.popup-icon {
+  margin-bottom: 15px;
+  display: inline-flex;
+  background-color: rgba(52, 211, 153, 0.1);
+  border-radius: 50%;
+  padding: 15px;
+}
+
+.popup-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.popup-message {
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+.popup-close-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background-color: #f5f5f5;
+  color: #666;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.popup-close-btn:hover {
+  background-color: #F96E53;
+  color: white;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Toast notification */
+.toast-notification {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #4B5563;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 30px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: transform 0.3s, opacity 0.3s;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  transform: translate(-50%, 20px);
+  opacity: 0;
 }
 </style>
