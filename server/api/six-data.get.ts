@@ -266,7 +266,7 @@ export async function processFinancialQuery(query: string, context?: {
             You take the user queries and also enhance them to use more specific and accurate language.
             Return your findings to the user in an easy to understand format.
 
-            You are able to run max 3 tools per query from the user. 
+            You are able to run only the most relevant tool call per query. Only one!
         `
 
         // Add context information if provided (for query planner use case)
@@ -324,7 +324,7 @@ export async function processFinancialQuery(query: string, context?: {
             toolChoice: 'required',
             system: systemPrompt,
             prompt: query as string,
-            maxSteps: 3
+            maxSteps: 1
         });
 
         // Process each step immediately for visualization

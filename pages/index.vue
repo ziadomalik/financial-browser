@@ -1,4 +1,10 @@
 <template>
+  <!-- 
+    Dashboard with integrated search functionality
+    - Search bar integrated in the header profile section
+    - Using the same handleSearch logic from Input.vue for consistency
+    - Socket connection for real-time visualization updates
+  -->
   <div class="dashboard-container w-full h-full">
     <!-- Header section -->
     <div class="client-profile w-full h-[130px] bg-[#F6F6F6] rounded-[20px]">
@@ -9,16 +15,50 @@
         <div class="avatar bg-white flex items-center justify-center">
             <Icon name="i-streamline-interface-setting-menu-2-button-parallel-horizontal-lines-menu-navigation-staggered-three-hamburger" class="size-6 text-[#292929] rounded-full" />
         </div>
-        <div class="avatar bg-[#333] flex items-center justify-center">
-            <Icon name="mdi:account" class="size-8 bg-[#D9D9D9] rounded-full" />
+        <div class="avatar bg-[#333] flex items-center justify-center overflow-hidden">
+            <img src="~/assets/images/ziad-profile.jpeg" alt="Ziad Malik" class="w-full h-full object-cover" />
         </div>
         <div class="user-info">
-          <h2 class="text-[#3E3E3E] font-semibold">John Smith</h2>
+          <h2 class="text-[#3E3E3E] font-semibold">Ziad Malik</h2>
           <p class="text-[#626262] font-medium">Dashboard</p>
         </div>
       </div>
-      <div class="avatar bg-white flex items-center justify-center">
-        <Icon name="i-cuida-sliders-outline" class="size-6 text-[#292929] rounded-full" /> 
+      
+      <div class="right-section flex items-center">
+        <!-- Search bar -->
+        <div class="search-container flex items-center mr-4">
+          <div class="relative w-[280px]">
+            <SInput 
+              v-model="searchQuery"
+              class="h-[40px] w-full rounded-full pl-10" 
+              placeholder="Search insights..." 
+              @keyup.enter="handleSearch"
+              :disabled="isLoading"
+            />
+            <span class="absolute left-0 inset-y-0 flex items-center justify-center px-3">
+              <Icon v-if="!isLoading" name="i-ph-magnifying-glass" class="size-4 text-[#DE3819]" />
+              <div v-else class="animate-spin size-4 text-[#DE3819]">
+                <Icon name="i-ph-spinner" class="size-4" />
+              </div>
+            </span>
+            <button 
+              @click="handleSearch" 
+              class="absolute right-0 inset-y-0 flex items-center justify-center px-3"
+              :disabled="isLoading || !searchQuery.trim()"
+            >
+              <span 
+                class="px-2 py-1 rounded-full bg-[#DE3819] text-white text-xs font-medium" 
+                :class="{'opacity-70': isLoading || !searchQuery.trim()}"
+              >
+                Search
+              </span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="avatar bg-white flex items-center justify-center">
+          <Icon name="i-cuida-sliders-outline" class="size-6 text-[#292929] rounded-full" /> 
+        </div>
       </div>
     </div>
 
@@ -153,7 +193,145 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+
 const isListening = ref(false);
+const searchQuery = ref('');
+const isLoading = ref(false);
+const currentJobId = ref<string | null>(null);
+const result = ref<any>('');
+const user = useSupabaseUser();
+
+// Get socket instance
+const { $socket } = useNuxtApp();
+
+// Setup event listeners for visualization updates from socket
+onMounted(() => {
+  if ($socket) {
+    // Listen for partial visualization updates
+    $socket.on('partial-visualization-update', handlePartialVisualization);
+    
+    // Listen for complete visualization updates
+    $socket.on('visualization-updates', handleCompleteVisualization);
+    
+    console.log('[Socket] Event listeners set up');
+  }
+});
+
+// Clean up event listeners
+onUnmounted(() => {
+  if ($socket) {
+    // Remove socket event listeners
+    $socket.off('partial-visualization-update', handlePartialVisualization);
+    $socket.off('visualization-updates', handleCompleteVisualization);
+    
+    console.log('[Socket] Event listeners cleaned up');
+  }
+});
+
+// Handle partial visualization update (single tool result)
+const handlePartialVisualization = async (data: { userId: string, visualizationData: any }) => {
+  try {
+    const visualizationData = data.visualizationData;
+    console.log('[Visualization] Received partial visualization:', visualizationData);
+    
+    // Check if this is for our current query
+    if (visualizationData.query !== searchQuery.value) {
+      console.log('[Visualization] Ignoring partial result for different query');
+      return;
+    }
+    
+    // Show loading indicator
+    isLoading.value = true;
+    
+    // For partial UI updates - simplified for dashboard display
+    console.log('[Visualization] Processing partial result for query:', searchQuery.value);
+    
+  } catch (error) {
+    console.error('[Visualization] Error handling partial visualization:', error);
+  }
+};
+
+// Handle complete visualization update (all tool results)
+const handleCompleteVisualization = async (data: { userId: string, visualizationData: any }) => {
+  try {
+    const visualizationData = data.visualizationData;
+    console.log('[Visualization] Received complete visualization:', visualizationData);
+    
+    // Check if this is for our current query
+    if (visualizationData.query !== searchQuery.value) {
+      console.log('[Visualization] Ignoring complete result for different query');
+      return;
+    }
+    
+    // Process the complete result - simplified for dashboard
+    console.log('[Visualization] Processing complete result for query:', searchQuery.value);
+    
+    // End loading state
+    isLoading.value = false;
+    
+  } catch (error) {
+    console.error('[Visualization] Error handling complete visualization:', error);
+    isLoading.value = false;
+  }
+};
+
+// Add the search query to the data processing pipeline
+const addQueryToPipeline = async (query: string) => {
+  try {
+    // Get the current user ID or use 'anonymous'
+    const userId = user.value?.id || 'anonymous';
+    
+    // Create a click event with the search query
+    const payload = {
+      userId,
+      eventType: 'click',
+      eventData: {
+        type: 'search',
+        query: query,
+        source: 'header-search-bar'
+      }
+    };
+    
+    // Add to the pipeline via API endpoint
+    const response = await $fetch<any>('/api/pipeline/add-event', {
+      method: 'POST',
+      body: payload
+    });
+    
+    if (response.success) {
+      console.log(`[Pipeline] Search query added to processing pipeline (Job ID: ${response.jobId})`);
+      currentJobId.value = response.jobId || null;
+      return true;
+    } else {
+      console.error('[Pipeline] Failed to add query to pipeline:', response.message);
+      return false;
+    }
+  } catch (error) {
+    console.error('[Pipeline] Error adding query to pipeline:', error);
+    return false;
+  }
+};
+
+// Handle search event
+const handleSearch = async () => {
+  if (!searchQuery.value.trim() || isLoading.value) return;
+  
+  // Set loading state
+  isLoading.value = true;
+  result.value = '';
+  
+  console.log('[Search] Starting search process for query:', searchQuery.value);
+  
+  // Add the query to the data processing pipeline
+  const pipelineResult = await addQueryToPipeline(searchQuery.value);
+  console.log('[Search] Pipeline result:', pipelineResult ? 'Added to pipeline' : 'Failed to add to pipeline');
+  
+  // If adding to pipeline failed, end loading state
+  if (!pipelineResult) {
+    isLoading.value = false;
+  }
+};
 
 // You might want to add a function to toggle listening state
 const toggleListening = () => {
@@ -174,12 +352,23 @@ const toggleListening = () => {
   padding: 15px 20px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
 }
 
 .profile-info {
   display: flex;
   gap: 15px;
+  align-items: center;
+}
+
+.right-section {
+  display: flex;
+  align-items: center;
+}
+
+.search-container {
+  margin-right: 15px;
 }
 
 .avatar {
