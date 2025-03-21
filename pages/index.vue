@@ -32,6 +32,7 @@
         </div>
       </div>
     </div>
+    <HomeFeed />
   </div>
 </template>
 
